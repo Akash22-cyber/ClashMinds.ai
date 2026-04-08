@@ -1,0 +1,23 @@
+server:
+  port: 1313
+
+database:
+  uri: "mongodb+srv://Sarvesh:Sarvesh%4022@cluster0.nu68fva.mongodb.net/?appName=Cluster0"
+
+gemini:
+  apiKey: "AIzaSyDMliY0g8nxaP644J6fzqM3TmFXHaQ_Qhk"
+
+jwt:
+  secret: "local_dev_secret_key_123"
+  expiry: 1440
+
+smtp:
+  host: "smtp.gmail.com"
+  port: 587
+  username: ""
+  password: ""
+  senderEmail: ""
+  senderName: "DebateAI Team"
+
+googleOAuth:
+  clientID: "862791183979-2v3io5lmb194qd3d0rnb7t901e4scc28.apps.googleusercontent.com"

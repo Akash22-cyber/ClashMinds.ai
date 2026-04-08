@@ -1,0 +1,39 @@
+# Common OS / IDE files
+.DS_Store
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Backend (Go)
+/backend/main
+/backend/server
+/backend/*.exe
+/backend/*.exe~
+/backend/*.dll
+/backend/*.so
+/backend/*.dylib
+/backend/out.log
+/backend/out*.txt
+/backend/.env
+
+# Frontend (Node/Vite)
+/frontend/node_modules/
+/frontend/dist/
+/frontend/dist-ssr/
+/frontend/*.local
+/frontend/.env
+/frontend/.env.*
+!/frontend/.env.example
+/frontend/npm-debug.log*
+/frontend/yarn-debug.log*
+/frontend/yarn-error.log*
+/frontend/pnpm-debug.log*
+
+# Other Environment variables
+.env
+.env.*
+!.env.example
