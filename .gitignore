@@ -19,6 +19,7 @@
 /backend/out.log
 /backend/out*.txt
 /backend/.env
+/backend/config/config.prod.yml
 
 # Frontend (Node/Vite)
 /frontend/node_modules/
