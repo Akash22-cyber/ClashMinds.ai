@@ -316,7 +316,7 @@ const OnlineDebateRoom = (): JSX.Element => {
               retries++;
             }
             if (wsRef.current?.readyState === WebSocket.OPEN) {
-              wsRef.current.send(JSON.stringify({ type: "offer", offer }));
+              wsRef.current.send(JSON.stringify({ type: "offer", offer, userId: currentUserId }));
             }
           } catch (err) {
             console.error("Error creating WebRTC offer:", err);
@@ -1332,14 +1332,14 @@ const OnlineDebateRoom = (): JSX.Element => {
                 retries++;
               }
               try {
-                await pcRef.current!.setRemoteDescription(data.offer!);
+                await pcRef.current!.setRemoteDescription(new RTCSessionDescription(data.offer!));
                 for (const candidate of pendingCandidatesRef.current) {
-                  await pcRef.current!.addIceCandidate(candidate).catch(() => {});
+                  await pcRef.current!.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
                 }
                 pendingCandidatesRef.current = [];
                 const answer = await pcRef.current!.createAnswer();
                 await pcRef.current!.setLocalDescription(answer);
-                wsRef.current?.send(JSON.stringify({ type: "answer", answer }));
+                wsRef.current?.send(JSON.stringify({ type: "answer", answer, userId: currentUserId }));
               } catch (err) {
                 console.error("Error setting remote offer:", err);
               }
@@ -1379,9 +1379,9 @@ const OnlineDebateRoom = (): JSX.Element => {
           ) {
             // Spectator answer meant for the other debater; ignore.
           } else if (pcRef.current && data.answer) {
-            await pcRef.current.setRemoteDescription(data.answer);
+            await pcRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
             for (const candidate of pendingCandidatesRef.current) {
-              await pcRef.current.addIceCandidate(candidate).catch(() => {});
+              await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
             }
             pendingCandidatesRef.current = [];
           }
@@ -1418,7 +1418,7 @@ const OnlineDebateRoom = (): JSX.Element => {
             }
           } else if (pcRef.current && data.candidate) {
             if (pcRef.current.remoteDescription && pcRef.current.remoteDescription.type) {
-              await pcRef.current.addIceCandidate(data.candidate).catch(() => {});
+              await pcRef.current.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(() => {});
             } else {
               pendingCandidatesRef.current.push(data.candidate);
             }
@@ -1439,7 +1439,7 @@ const OnlineDebateRoom = (): JSX.Element => {
     pc.onicecandidate = (event) => {
       if (event.candidate && wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(
-          JSON.stringify({ type: "candidate", candidate: event.candidate })
+          JSON.stringify({ type: "candidate", candidate: event.candidate, userId: currentUserIdRef.current })
         );
       }
     };
