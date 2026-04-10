@@ -999,6 +999,39 @@ const OnlineDebateRoom = (): JSX.Element => {
     return false;
   }, [roomId, currentUser, setRoomOwnerId]);
 
+  // Function to join a room
+  const joinRoom = useCallback(async () => {
+    if (!roomId || !currentUser) return false;
+
+    try {
+      const token = getAuthToken();
+      console.debug(`Attempting to join room: ${roomId}`);
+      const response = await fetch(`${BASE_URL}/rooms/${roomId}/join`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (response.ok) {
+        console.debug(`Successfully joined room: ${roomId}`);
+        return true;
+      }
+
+      const errorData = await response.json();
+      if (response.status === 404) {
+        console.warn("Room not found during join attempt.");
+        return "create"; // Signal that creation is needed
+      }
+
+      console.error("Join room failed:", errorData.error);
+    } catch (error) {
+      console.error("Failed to join room:", error);
+    }
+    return false;
+  }, [roomId, currentUser]);
+
   // Function to fetch room participants
   const fetchRoomParticipants = useCallback(
     async () => {
@@ -1184,23 +1217,24 @@ const OnlineDebateRoom = (): JSX.Element => {
       console.log(`Starting room initialization for: ${roomId}`);
 
       try {
-        // Step 1: Attempt to fetch participants (Check if room exists)
-        let ready = await fetchRoomParticipants();
+        // Step 1: Attempt to JOIN the room first
+        let joinResult = await joinRoom();
         
-        // Step 2: If not found, attempt to create
-        if (!ready) {
-           console.log("Room not found, attempting creation...");
+        // Step 2: If room not found, attempt to CREATE
+        if (joinResult === "create" || !joinResult) {
+           console.log("Room needs creation, attempting...");
            const created = await createRoomIfNeeded();
            if (!created) {
-             console.error("Critical: Could not create or find room.");
+             console.error("Critical: Could not create or join room.");
              setIsLoading(false);
              return;
            }
-           
            // Small delay for DB consistency before final fetch
            await new Promise(resolve => setTimeout(resolve, 1000));
-           ready = await fetchRoomParticipants();
         }
+
+        // Step 3: Fetch final participant list to confirm ready
+        const ready = await fetchRoomParticipants();
 
         if (ready && isMounted) {
           console.log("Room is ready for connection.");
