@@ -56,6 +56,7 @@ const handleGoogleLogin = useCallback(
       google.accounts.id.initialize({
         client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
         callback: handleGoogleLogin,
+        auto_select: false,
       });
 
       const buttonElement = document.getElementById('googleSignInButton');
