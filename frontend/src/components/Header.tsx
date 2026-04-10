@@ -1,6 +1,6 @@
 import React, { useState, useContext, useEffect } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { Bell, Menu, X, Home, BarChart, User, Info, LogOut, Heart } from "lucide-react";
+import { Bell, Menu, X, Home, BarChart, User, Info, LogOut, Heart, Copy, Check } from "lucide-react";
 import { useAtom } from "jotai";
 import { userAtom } from "@/state/userAtom";
 import { AuthContext } from "@/context/authContext";
@@ -35,6 +35,15 @@ function Header() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const copyToClipboard = () => {
+    if (user?.id) {
+      navigator.clipboard.writeText(user.id);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
   const toggleDrawer = () => setIsDrawerOpen(!isDrawerOpen);
 
@@ -238,11 +247,22 @@ function Header() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
+                  <div className="flex justify-between items-center text-sm">
                     <span className="text-muted-foreground">User ID</span>
-                    <span className="font-mono text-xs bg-muted px-2 py-0.5 rounded text-muted-foreground truncate max-w-[150px]" title={user?.id}>
-                      {user?.id || "N/A"}
-                    </span>
+                    <div className="flex items-center gap-1">
+                      <span className="font-mono text-xs bg-muted px-2 py-0.5 rounded text-muted-foreground truncate max-w-[150px]" title={user?.id}>
+                        {user?.id || "N/A"}
+                      </span>
+                      {user?.id && (
+                        <button
+                          onClick={copyToClipboard}
+                          className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                          title="Copy User ID"
+                        >
+                          {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Rating</span>
