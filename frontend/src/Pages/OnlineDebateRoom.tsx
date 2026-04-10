@@ -145,12 +145,7 @@ const extractJSON = (response: string): string => {
   if (match && match[1]) return match[1].trim();
   return response;
 };
-const BASE_URL = import.meta.env.VITE_BASE_URL || window.location.origin;
-
-const WS_BASE_URL = BASE_URL.replace(
-  /^https?/,
-  (match: string) => (match === "https" ? "wss" : "ws")
-);
+import { API_BASE_URL, WS_BASE_URL } from "../config";
 
 
 const OnlineDebateRoom = (): JSX.Element => {
@@ -591,7 +586,7 @@ const OnlineDebateRoom = (): JSX.Element => {
       judgePollRef.current = setInterval(async () => {
         try {
           const pollResponse = await fetch(
-            `${BASE_URL}/submit-transcripts`,
+            `${API_BASE_URL}/submit-transcripts`,
             {
               method: "POST",
               headers: {
@@ -678,7 +673,7 @@ const OnlineDebateRoom = (): JSX.Element => {
 
       try {
         const response = await fetch(
-          `${BASE_URL}/submit-transcripts`,
+          `${API_BASE_URL}/submit-transcripts`,
           {
             method: "POST",
             headers: {
@@ -974,8 +969,7 @@ const OnlineDebateRoom = (): JSX.Element => {
 
     try {
       const token = getAuthToken();
-      const response = await fetch(`${BASE_URL}/rooms`, {
-
+      const response = await fetch(`${API_BASE_URL}/rooms`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1006,7 +1000,7 @@ const OnlineDebateRoom = (): JSX.Element => {
     try {
       const token = getAuthToken();
       console.debug(`Attempting to join room: ${roomId}`);
-      const response = await fetch(`${BASE_URL}/rooms/${roomId}/join`, {
+      const response = await fetch(`${API_BASE_URL}/rooms/${roomId}/join`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -1041,8 +1035,9 @@ const OnlineDebateRoom = (): JSX.Element => {
       try {
         const token = getAuthToken();
         const response = await fetch(
-          `${BASE_URL}/rooms/${roomId}/participants`,
+          `${API_BASE_URL}/rooms/${roomId}/participants`,
           {
+            method: "GET",
             headers: {
               Authorization: `Bearer ${token}`,
             },
@@ -1211,7 +1206,11 @@ const OnlineDebateRoom = (): JSX.Element => {
     let isMounted = true;
     
     const initialize = async () => {
-      if (!roomId || !currentUser) return;
+      if (!roomId || roomId === "undefined") {
+         console.error("Invalid Room ID detected.");
+         return;
+      }
+      if (!currentUser) return;
       
       setIsLoading(true);
       console.log(`Starting room initialization for: ${roomId}`);

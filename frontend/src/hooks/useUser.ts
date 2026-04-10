@@ -2,6 +2,7 @@ import { useEffect, useContext } from "react";
 import { useAtom } from "jotai";
 import { userAtom } from "../state/userAtom";
 import { AuthContext } from "../context/authContext";
+import { API_BASE_URL } from "../config";
 
 const USER_CACHE_KEY = "userProfile";
 const DEFAULT_AVATAR = "https://avatar.iran.liara.run/public/10";
@@ -41,8 +42,7 @@ export const useUser = () => {
       if (user?.email) return;
 
       try {
-        const baseUrl = import.meta.env.VITE_BASE_URL || "http://localhost:1313";
-        const response = await fetch(`${baseUrl}/user/fetchprofile`, {
+        const response = await fetch(`${API_BASE_URL}/user/fetchprofile`, {
           method: "GET",
           headers: { Authorization: `Bearer ${token}` },
         });
