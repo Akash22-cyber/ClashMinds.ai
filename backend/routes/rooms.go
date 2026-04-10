@@ -33,6 +33,8 @@ type Participant struct {
 	Elo       int    `json:"elo" bson:"elo"`
 	AvatarURL string `json:"avatarUrl" bson:"avatarUrl,omitempty"`
 	Email     string `json:"email" bson:"email,omitempty"`
+	Role      string `json:"role" bson:"role,omitempty"`
+	IsReady   bool   `json:"isReady" bson:"isReady"`
 }
 
 // generateRoomID creates a random six-digit room ID as a string.

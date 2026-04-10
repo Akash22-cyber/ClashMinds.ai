@@ -1090,6 +1090,10 @@ const OnlineDebateRoom = (): JSX.Element => {
                   "https://avatar.iran.liara.run/public/31",
               };
               setOpponentUser(opponentData);
+              // Sync role and ready status from DB
+              if (opponentParticipant.role) setPeerRole(opponentParticipant.role as "for" | "against");
+              if (opponentParticipant.isReady !== undefined) setPeerReady(opponentParticipant.isReady);
+              
               localStorage.setItem(
                 "opponentAvatar",
                 opponentData.avatarUrl || ""
@@ -1408,6 +1412,9 @@ const OnlineDebateRoom = (): JSX.Element => {
                     opponentParticipant.avatarUrl ||
                     "https://avatar.iran.liara.run/public/31",
                 });
+                // Sync role and ready status from DB payload
+                if (opponentParticipant.role) setPeerRole(opponentParticipant.role as "for" | "against");
+                if (opponentParticipant.isReady !== undefined) setPeerReady(opponentParticipant.isReady);
               } else {
                 setOpponentUser(null);
               }
