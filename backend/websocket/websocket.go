@@ -259,6 +259,7 @@ func WebsocketHandler(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing room parameter"})
 		return
 	}
+	log.Printf("[ws] Connecting user %s to room %s", email, roomID)
 
 	// Get user details from database
 	userID, username, avatarURL, rating, err := getUserDetails(email)
@@ -267,10 +268,27 @@ func WebsocketHandler(c *gin.Context) {
 		return
 	}
 
-	// Create the room if it doesn't exist.
+	// Create the room if it doesn't exist in memory.
 	roomsMutex.Lock()
 	if _, exists := rooms[roomID]; !exists {
-		rooms[roomID] = &Room{Clients: make(map[*websocket.Conn]*Client)}
+		// Before creating a fresh empty room, check if it exists in MongoDB
+		// This handles cases where an instance might have restarted or users are on different instances
+		roomCollection := db.MongoDatabase.Collection("rooms")
+		var dbRoom struct {
+			ID           string        `bson:"_id"`
+			Type         string        `bson:"type"`
+			OwnerID      string        `bson:"ownerId"`
+			Participants []Participant `bson:"participants"`
+		}
+		
+		err := roomCollection.FindOne(ctx, bson.M{"_id": roomID}).Decode(&dbRoom)
+		if err == nil {
+			log.Printf("[ws] Reviving room %s from MongoDB (Participants: %d)", roomID, len(dbRoom.Participants))
+			rooms[roomID] = &Room{Clients: make(map[*websocket.Conn]*Client)}
+		} else {
+			// Brand new room
+			rooms[roomID] = &Room{Clients: make(map[*websocket.Conn]*Client)}
+		}
 	}
 	room := rooms[roomID]
 	roomsMutex.Unlock()

@@ -29,7 +29,6 @@ import {
   pollStateAtom,
   PollInfo,
 } from "@/atoms/debateAtoms";
-import { useDebateWS } from "@/hooks/useDebateWS";
 
 // Define debate phases as an enum
 enum DebatePhase {
@@ -157,9 +156,8 @@ const OnlineDebateRoom = (): JSX.Element => {
   const { roomId } = useParams<{ roomId: string }>();
   const { user: currentUser } = useUser();
   const currentUserId = currentUser?.id ?? null;
-  useDebateWS(roomId ?? null);
-  const [audienceQuestions] = useAtom(questionsAtom);
-  const [spectatorPresence] = useAtom(presenceAtom);
+  const [audienceQuestions, setQuestions] = useAtom(questionsAtom);
+  const [spectatorPresence, setPresence] = useAtom(presenceAtom);
   const [pollState] = useAtom(pollStateAtom);
   const recentQuestions = useMemo(
     () =>
@@ -1227,7 +1225,12 @@ const OnlineDebateRoom = (): JSX.Element => {
     const token = getAuthToken();
     if (!token || !roomId) return;
 
-   const wsUrl = `${WS_BASE_URL}/ws?room=${roomId}&token=${token}`;
+    // Sanitize roomId for the connection string
+    const cleanRoomId = roomId.trim();
+    const wsBase = WS_BASE_URL.endsWith("/") ? WS_BASE_URL.slice(0, -1) : WS_BASE_URL;
+    const wsUrl = `${wsBase}/ws?room=${cleanRoomId}&token=${token}`;
+    
+    console.log(`[WebSocket] Connecting to: ${wsUrl}`);
 
     const rws = new ReconnectingWebSocket(wsUrl, [], {
       connectionTimeout: 4000,
@@ -1315,6 +1318,29 @@ const OnlineDebateRoom = (): JSX.Element => {
             setCurrentTranscript(data.liveTranscript);
           }
           break;
+        case "presence": {
+          const count = data.spectatorCount || 0;
+          setPresence(count);
+          break;
+        }
+        case "poll_snapshot": {
+          // Add poll snapshot handling here if needed
+          break;
+        }
+        case "question": {
+          if (data.message) {
+            setQuestions((prev) => [
+              ...prev,
+              {
+                qId: data.requestId || Date.now().toString(),
+                text: data.message || "",
+                spectatorHash: data.userId || "anonymous",
+                timestamp: Date.now(),
+              },
+            ]);
+          }
+          break;
+        }
         case "userDetails":
           if (data.userDetails) {
             if (data.userDetails.id === currentUser?.id) {
