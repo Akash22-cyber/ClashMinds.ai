@@ -1,4 +1,4 @@
-export const API_BASE_URL = import.meta.env.VITE_API_URL || "https://clashminds.ai/api";
+export const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:1313/api";
 
 export const getWSBaseURL = (url: string) => {
   return url.replace(/^http/, "ws");
