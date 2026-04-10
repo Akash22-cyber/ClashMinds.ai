@@ -206,11 +206,6 @@ func JoinRoomHandler(c *gin.Context) {
 
 	var updatedRoom Room
 	if err := roomCollection.FindOneAndUpdate(ctx, filter, update, opts).Decode(&updatedRoom); err != nil {
-		// If room doesn't exist, return 404 instead of 500
-		if err.Error() == "mongo: no documents in result" {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Room not found"})
-			return
-		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not join room"})
 		return
 	}
