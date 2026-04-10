@@ -2200,6 +2200,9 @@ const OnlineDebateRoom = (): JSX.Element => {
       const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
       return () => clearTimeout(timer);
     } else if (countdown === 0) {
+      if (!localRole) {
+        setLocalRole(isRoomOwner ? "for" : "against");
+      }
       setDebatePhase(DebatePhase.OpeningFor);
       wsRef.current?.send(
         JSON.stringify({ type: "phaseChange", phase: DebatePhase.OpeningFor })
@@ -2507,18 +2510,18 @@ const OnlineDebateRoom = (): JSX.Element => {
                 </div>
                 {/* Ready Button */}
                 <div className="space-y-2">
-                  {(!localRole || !localTopic.trim()) && (
+                  {!localTopic.trim() && (
                     <p className="text-[10px] text-orange-500 text-center animate-pulse">
-                      Select a topic and a role (For/Against) to start.
+                      Enter a debate topic to start.
                     </p>
                   )}
                   <Button
                     onClick={toggleReady}
-                    disabled={!localRole || !localTopic.trim()}
+                    disabled={!localTopic.trim()}
                     className={`w-full py-2 rounded-lg transition ${
                       localReady
                         ? "bg-destructive text-destructive-foreground"
-                        : (!localRole || !localTopic.trim())
+                        : (!localTopic.trim())
                           ? "bg-muted text-muted-foreground cursor-not-allowed"
                           : "bg-accent text-accent-foreground"
                     }`}
