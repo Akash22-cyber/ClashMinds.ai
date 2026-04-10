@@ -187,9 +187,11 @@ func buildParticipantsMessage(room *Room, roomID string) map[string]interface{} 
 	var dbRoom struct {
 		Participants []Participant `bson:"participants"`
 	}
+	log.Printf("[ws] Fetching participants from DB for room: '%s'", roomID)
 	err := roomCollection.FindOne(ctx, bson.M{"_id": roomID}).Decode(&dbRoom)
 	
 	if err == nil {
+		log.Printf("[ws] Found %d participants in DB for room %s", len(dbRoom.Participants), roomID)
 		for _, p := range dbRoom.Participants {
 			// Find if this participant is currently connected to THIS instance
 			// to potentially add extra real-time flags (isMuted, etc.)
@@ -420,7 +422,7 @@ func WebsocketHandler(c *gin.Context) {
 		}
 		
 		// Add to set ensures we don't add duplicates if they refresh
-		_, err := roomCollection.UpdateOne(
+		result, err := roomCollection.UpdateOne(
 			updCtx, 
 			bson.M{"_id": roomID}, 
 			bson.M{"$addToSet": bson.M{"participants": participant}},
@@ -428,7 +430,7 @@ func WebsocketHandler(c *gin.Context) {
 		if err != nil {
 			log.Printf("[ws] Failed to add participant %s to mongo room %s: %v", email, roomID, err)
 		} else {
-			log.Printf("[ws] Added/verified participant %s in mongo room %s", email, roomID)
+			log.Printf("[ws] Room update result for %s: Matched=%d, Modified=%d", roomID, result.MatchedCount, result.ModifiedCount)
 		}
 	}
 

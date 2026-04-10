@@ -1043,14 +1043,18 @@ const OnlineDebateRoom = (): JSX.Element => {
 
           // Set local and opponent user details
           if (currentUser && participants.length >= 1) {
+            // Refined resilient identification logic
             const localParticipant = participants.find(
-              (p: UserDetails) =>
-                p.id === currentUser.id || p.email === currentUser.email
+              (p: UserDetails) => 
+                (p.email && p.email === currentUser.email) || 
+                (p.id && p.id === currentUser.id)
             );
+            
+            // The opponent is anyone else who isn't the local user
             const opponentParticipant = participants.find(
-              (p: UserDetails) =>
-                (p.id !== currentUser.id || !p.id) &&
-                p.email !== currentUser.email
+              (p: UserDetails) => 
+                (p.email && p.email !== currentUser.email) || 
+                (p.id && p.id !== currentUser.id)
             );
 
             if (localParticipant) {
@@ -1378,12 +1382,14 @@ const OnlineDebateRoom = (): JSX.Element => {
             if (currentUser && data.roomParticipants.length >= 1) {
               const localParticipant = data.roomParticipants.find(
                 (p: UserDetails) =>
-                  p.id === currentUser.id || p.email === currentUser.email
+                  (p.email && p.email === currentUser.email) ||
+                  (p.id && p.id === currentUser.id)
               );
+              
               const opponentParticipant = data.roomParticipants.find(
                 (p: UserDetails) =>
-                  (p.id && p.id !== currentUser.id) ||
-                  (!p.id && p.email && p.email !== currentUser.email)
+                  (p.email && p.email !== currentUser.email) ||
+                  (p.id && p.id !== currentUser.id)
               );
 
               if (localParticipant) {
