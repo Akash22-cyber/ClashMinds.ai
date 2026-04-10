@@ -2260,25 +2260,24 @@ const OnlineDebateRoom = (): JSX.Element => {
                 {/* Debate Topic */}
                 <div className="mb-6">
                   <label className="block text-lg mb-2">Debate Topic</label>
-                  <select
-                    value={topic}
-                    onChange={(e) => handleTopicChange(e)}
-                    className="border border-border rounded p-2 w-full bg-input text-foreground mb-2"
-                  >
-                    <option value="">Select a topic or enter custom</option>
-                    {predefinedTopics.map((predefinedTopic, index) => (
-                      <option key={index} value={predefinedTopic}>
-                        {predefinedTopic}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="text"
-                    value={topic}
-                    onChange={handleTopicChange}
-                    placeholder="Or enter a custom debate topic"
-                    className="border border-border rounded p-2 w-full bg-input text-foreground"
-                  />
+                  <div className="relative">
+                    <input
+                      type="text"
+                      list="topics-list"
+                      value={topic}
+                      onChange={handleTopicChange}
+                      placeholder="Select a topic or enter custom..."
+                      className="border border-border rounded-lg p-3 w-full bg-input text-foreground focus:ring-2 focus:ring-orange-400 focus:border-transparent transition-all outline-none"
+                    />
+                    <datalist id="topics-list">
+                      {predefinedTopics.map((pt, index) => (
+                        <option key={index} value={pt} />
+                      ))}
+                    </datalist>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground italic">
+                    Both debaters can see topic changes in real-time.
+                  </p>
                 </div>
                 {/* Avatars and Role Selection */}
                 <div className="mb-6 flex justify-around">
@@ -2310,7 +2309,7 @@ const OnlineDebateRoom = (): JSX.Element => {
                           "You"}
                       </div>
                       <div className="text-xs text-gray-500">
-                        Rating: {localUser?.elo || currentUser?.rating || 1500}
+                        Rating: {Math.round(localUser?.elo || currentUser?.rating || 1500)}
                       </div>
                     </div>
                     <div className="mt-2 flex space-x-2">
@@ -2372,7 +2371,7 @@ const OnlineDebateRoom = (): JSX.Element => {
                             : "Waiting for opponent...")}
                       </div>
                       <div className="text-xs text-gray-500">
-                        Rating: {opponentUser?.elo || 1500}
+                        Rating: {Math.round(opponentUser?.elo || 1500)}
                       </div>
                       {!opponentUser && roomParticipants.length === 1 && (
                         <div className="text-xs text-orange-500 mt-1">
@@ -2505,7 +2504,7 @@ const OnlineDebateRoom = (): JSX.Element => {
               </div>
               <div className="text-xs text-gray-500">
                 Role: {localRole || "Not selected"} | Rating:{" "}
-                {localUser?.elo || currentUser?.rating || 1500}
+                {Math.round(localUser?.elo || currentUser?.rating || 1500)}
               </div>
             </div>
           </div>
@@ -2524,12 +2523,24 @@ const OnlineDebateRoom = (): JSX.Element => {
                 muted
                 playsInline
                 className={`w-full h-80 object-cover rounded-lg ${
-                  isCameraOff ? "opacity-0" : "opacity-100"
+                  isCameraOff || (debatePhase === DebatePhase.Setup && (!localReady || !peerReady)) ? "opacity-0" : "opacity-100"
                 } transition-opacity duration-300`}
               />
-              {isCameraOff && (
-                <div className="absolute inset-0 flex items-center justify-center bg-gray-900 rounded-lg">
-                  <VideoOff className="w-16 h-16 text-gray-600" />
+              {(isCameraOff || (debatePhase === DebatePhase.Setup && (!localReady || !peerReady))) && (
+                <div className="absolute inset-0 flex items-center justify-center bg-gray-900 rounded-lg overflow-hidden">
+                  <div className="relative flex flex-col items-center gap-4">
+                    <img 
+                      src={localUser?.avatarUrl || currentUser?.avatarUrl || "https://avatar.iran.liara.run/public/40"} 
+                      alt="Local Avatar"
+                      className="w-32 h-32 rounded-full border-4 border-orange-500/30 object-cover grayscale-[0.2]"
+                    />
+                    <div className="flex flex-col items-center">
+                      <span className="text-white font-medium text-lg">{localUser?.displayName || "You"}</span>
+                      <span className="text-gray-400 text-sm italic">
+                        {isCameraOff ? "Camera Off" : "Waiting in Lobby"}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               )}
               {/* Media Controls Overlay */}
@@ -2610,7 +2621,7 @@ const OnlineDebateRoom = (): JSX.Element => {
               </div>
               <div className="text-xs text-gray-500">
                 Role: {peerRole || "Not selected"} | Rating:{" "}
-                {opponentUser?.elo || 1500}
+                {Math.round(opponentUser?.elo || 1500)}
               </div>
             </div>
           </div>
@@ -2622,12 +2633,31 @@ const OnlineDebateRoom = (): JSX.Element => {
               Time:{" "}
               {formatTime(!isMyTurn ? timer : phaseDurations[debatePhase] || 0)}
             </p>
-            <video
-              ref={remoteVideoRef}
-              autoPlay
-              playsInline
-              className="w-full h-80 object-cover"
-            />
+            <div className="relative group">
+              <video
+                ref={remoteVideoRef}
+                autoPlay
+                playsInline
+                className={`w-full h-80 object-cover rounded-lg ${
+                   (debatePhase === DebatePhase.Setup && (!localReady || !peerReady)) ? "opacity-0" : "opacity-100"
+                } transition-opacity duration-300`}
+              />
+              {(debatePhase === DebatePhase.Setup && (!localReady || !peerReady)) && (
+                <div className="absolute inset-0 flex items-center justify-center bg-gray-900 rounded-lg overflow-hidden">
+                   <div className="relative flex flex-col items-center gap-4">
+                    <img 
+                      src={opponentUser?.avatarUrl || "https://avatar.iran.liara.run/public/31"} 
+                      alt="Peer Avatar"
+                      className="w-32 h-32 rounded-full border-4 border-orange-500/30 object-cover grayscale-[0.2]"
+                    />
+                    <div className="flex flex-col items-center">
+                      <span className="text-white font-medium text-lg">{opponentUser?.displayName || "Opponent"}</span>
+                      <span className="text-gray-400 text-sm italic">Waiting in Lobby</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
