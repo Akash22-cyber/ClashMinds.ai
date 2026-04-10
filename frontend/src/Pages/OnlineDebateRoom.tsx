@@ -29,6 +29,7 @@ import {
   pollStateAtom,
   PollInfo,
 } from "@/atoms/debateAtoms";
+import { useDebateWS } from "@/hooks/useDebateWS";
 
 // Define debate phases as an enum
 enum DebatePhase {
@@ -86,8 +87,6 @@ interface UserDetails {
   avatarUrl?: string;
   displayName?: string;
   email?: string;
-  role?: string;
-  isReady?: boolean;
 }
 
 // Define WebSocket message structure
@@ -158,8 +157,9 @@ const OnlineDebateRoom = (): JSX.Element => {
   const { roomId } = useParams<{ roomId: string }>();
   const { user: currentUser } = useUser();
   const currentUserId = currentUser?.id ?? null;
-  const [audienceQuestions, setQuestions] = useAtom(questionsAtom);
-  const [spectatorPresence, setPresence] = useAtom(presenceAtom);
+  useDebateWS(roomId ?? null);
+  const [audienceQuestions] = useAtom(questionsAtom);
+  const [spectatorPresence] = useAtom(presenceAtom);
   const [pollState] = useAtom(pollStateAtom);
   const recentQuestions = useMemo(
     () =>
@@ -253,7 +253,6 @@ const OnlineDebateRoom = (): JSX.Element => {
 
   const [isMicMuted, setIsMicMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
-  const [isRoomReady, setIsRoomReady] = useState(false);
   const navigate = useNavigate();
 
   const toggleMic = useCallback(() => {
@@ -1001,7 +1000,7 @@ const OnlineDebateRoom = (): JSX.Element => {
 
   // Function to fetch room participants
   const fetchRoomParticipants = useCallback(
-    async () => {
+    async (retryCount = 0) => {
       if (!roomId) return;
 
       setIsLoading(true);
@@ -1043,18 +1042,14 @@ const OnlineDebateRoom = (): JSX.Element => {
 
           // Set local and opponent user details
           if (currentUser && participants.length >= 1) {
-            // Refined resilient identification logic
             const localParticipant = participants.find(
-              (p: UserDetails) => 
-                (p.email && p.email === currentUser.email) || 
-                (p.id && p.id === currentUser.id)
+              (p: UserDetails) =>
+                p.id === currentUser.id || p.email === currentUser.email
             );
-            
-            // The opponent is anyone else who isn't the local user
             const opponentParticipant = participants.find(
-              (p: UserDetails) => 
-                (p.email && p.email !== currentUser.email) || 
-                (p.id && p.id !== currentUser.id)
+              (p: UserDetails) =>
+                (p.id !== currentUser.id || !p.id) &&
+                p.email !== currentUser.email
             );
 
             if (localParticipant) {
@@ -1096,10 +1091,6 @@ const OnlineDebateRoom = (): JSX.Element => {
                   "https://avatar.iran.liara.run/public/31",
               };
               setOpponentUser(opponentData);
-              // Sync role and ready status from DB
-              if (opponentParticipant.role) setPeerRole(opponentParticipant.role as "for" | "against");
-              if (opponentParticipant.isReady !== undefined) setPeerReady(opponentParticipant.isReady);
-              
               localStorage.setItem(
                 "opponentAvatar",
                 opponentData.avatarUrl || ""
@@ -1118,23 +1109,34 @@ const OnlineDebateRoom = (): JSX.Element => {
                 avatarUrl: currentUser.avatarUrl,
               });
             }
-        }
-          
-          if (!response.ok) {
+          }
+        } else {
+          console.error(
+            "API response not ok:",
+            response.status,
+            response.statusText
+          );
+
+          // If room not found (404), it might still be being created
+          if (response.status === 404 && retryCount < 5) {
             console.warn(
-              "Room participants API returned status:",
-              response.status
+              `Room not found, might still be creating. Retry ${
+                retryCount + 1
+              }/5 in 2 seconds...`
             );
-          }
 
-          // If room not found (initializing), return false to let the orchestrator handle it
-          if (response.status === 200) {
-            const data = await response.json();
-            if (data.status === "initializing") {
-               return false;
+            // Try to create the room if it's the first retry
+            if (retryCount === 0) {
+              await createRoomIfNeeded();
             }
+
+            setTimeout(() => {
+              fetchRoomParticipants(retryCount + 1);
+            }, 2000);
+            return;
           }
 
+          // Fallback: use current user as local user and create a placeholder opponent
           if (currentUser) {
             const fallbackLocalUser = {
               id: currentUser.id || "",
@@ -1160,98 +1162,36 @@ const OnlineDebateRoom = (): JSX.Element => {
             avatarUrl: currentUser.avatarUrl,
             displayName: currentUser.displayName,
           };
+          console.warn(
+            "Setting error fallback local user:",
+            errorFallbackLocalUser
+          );
           setLocalUser(errorFallbackLocalUser);
           setRoomOwnerId((prev) => prev ?? currentUser.id ?? null);
         }
       } finally {
         setIsLoading(false);
       }
-      return true;
     },
-    [roomId, currentUser, setRoomOwnerId, setIsLoading, setLocalUser, setOpponentUser, setRoomParticipants]
+    [
+      roomId,
+      currentUser,
+      createRoomIfNeeded,
+      setIsLoading,
+      setLocalUser,
+      setOpponentUser,
+      setRoomOwnerId,
+      setRoomParticipants,
+    ]
   );
-
-  // Robust Lobby Polling Fallback
-  // This ensures participants are synced even if WebSocket broadcasts are split across instances
-  useEffect(() => {
-    let pollingInterval: NodeJS.Timeout | null = null;
-
-    if (debatePhase === DebatePhase.Setup && roomId && isRoomReady) {
-      console.log("[Lobby] Starting participant polling fallback...");
-      pollingInterval = setInterval(() => {
-        // Poll for participants every 5 seconds while in setup
-        fetchRoomParticipants();
-      }, 5000);
-    }
-
-    return () => {
-      if (pollingInterval) {
-        console.log("[Lobby] Stopping participant polling...");
-        clearInterval(pollingInterval);
-      }
-    };
-  }, [debatePhase, roomId, isRoomReady, fetchRoomParticipants]);
-
-  // New Sequential Initialization Logic
-  useEffect(() => {
-    let isMounted = true;
-    
-    const initialize = async () => {
-      if (!roomId || !currentUser) return;
-      
-      setIsLoading(true);
-      console.log(`Starting room initialization for: ${roomId}`);
-
-      try {
-        // Step 1: Attempt to fetch participants (Check if room exists)
-        let ready = await fetchRoomParticipants();
-        
-        // Step 2: If not found, attempt to create
-        if (!ready) {
-           console.log("Room not found, attempting creation...");
-           const created = await createRoomIfNeeded();
-           if (!created) {
-             console.error("Critical: Could not create or find room.");
-             setIsLoading(false);
-             return;
-           }
-           
-           // Small delay for DB consistency before final fetch
-           await new Promise(resolve => setTimeout(resolve, 1000));
-           ready = await fetchRoomParticipants();
-        }
-
-        if (ready && isMounted) {
-          console.log("Room is ready for connection.");
-          setIsRoomReady(true);
-        }
-      } catch (err) {
-        console.error("Initialization failed:", err);
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
-    };
-
-    initialize();
-    
-    return () => { isMounted = false; };
-  }, [roomId, currentUser, createRoomIfNeeded, fetchRoomParticipants, setIsLoading]);
 
   // Initialize WebSocket, RTCPeerConnection, and media
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    // ONLY initialize if the room is confirmed ready
-    if (!isRoomReady) return;
-
     const token = getAuthToken();
     if (!token || !roomId) return;
 
-    // Sanitize roomId for the connection string
-    const cleanRoomId = roomId.trim();
-    const wsBase = WS_BASE_URL.endsWith("/") ? WS_BASE_URL.slice(0, -1) : WS_BASE_URL;
-    const wsUrl = `${wsBase}/ws?room=${cleanRoomId}&token=${token}`;
-    
-    console.log(`[WebSocket] Connecting to: ${wsUrl}`);
+   const wsUrl = `${WS_BASE_URL}/ws?room=${roomId}&token=${token}`;
 
     const rws = new ReconnectingWebSocket(wsUrl, [], {
       connectionTimeout: 4000,
@@ -1264,6 +1204,10 @@ const OnlineDebateRoom = (): JSX.Element => {
 
     rws.onopen = () => {
       rws.send(JSON.stringify({ type: "join", room: roomId }));
+      // Wait a bit before fetching participants to ensure room is fully created
+      setTimeout(() => {
+        fetchRoomParticipants();
+      }, 1000);
       getMedia();
       flushSpectatorOfferQueue();
     };
@@ -1339,29 +1283,6 @@ const OnlineDebateRoom = (): JSX.Element => {
             setCurrentTranscript(data.liveTranscript);
           }
           break;
-        case "presence": {
-          const count = data.spectatorCount || 0;
-          setPresence(count);
-          break;
-        }
-        case "poll_snapshot": {
-          // Add poll snapshot handling here if needed
-          break;
-        }
-        case "question": {
-          if (data.message) {
-            setQuestions((prev) => [
-              ...prev,
-              {
-                qId: data.requestId || Date.now().toString(),
-                text: data.message || "",
-                spectatorHash: data.userId || "anonymous",
-                timestamp: Date.now(),
-              },
-            ]);
-          }
-          break;
-        }
         case "userDetails":
           if (data.userDetails) {
             if (data.userDetails.id === currentUser?.id) {
@@ -1382,14 +1303,12 @@ const OnlineDebateRoom = (): JSX.Element => {
             if (currentUser && data.roomParticipants.length >= 1) {
               const localParticipant = data.roomParticipants.find(
                 (p: UserDetails) =>
-                  (p.email && p.email === currentUser.email) ||
-                  (p.id && p.id === currentUser.id)
+                  p.id === currentUser.id || p.email === currentUser.email
               );
-              
               const opponentParticipant = data.roomParticipants.find(
                 (p: UserDetails) =>
-                  (p.email && p.email !== currentUser.email) ||
-                  (p.id && p.id !== currentUser.id)
+                  (p.id && p.id !== currentUser.id) ||
+                  (!p.id && p.email && p.email !== currentUser.email)
               );
 
               if (localParticipant) {
@@ -1420,9 +1339,6 @@ const OnlineDebateRoom = (): JSX.Element => {
                     opponentParticipant.avatarUrl ||
                     "https://avatar.iran.liara.run/public/31",
                 });
-                // Sync role and ready status from DB payload
-                if (opponentParticipant.role) setPeerRole(opponentParticipant.role as "for" | "against");
-                if (opponentParticipant.isReady !== undefined) setPeerReady(opponentParticipant.isReady);
               } else {
                 setOpponentUser(null);
               }

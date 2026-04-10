@@ -49,8 +49,7 @@ type Client struct {
 	PartialText  string
 	LastActivity time.Time
 	IsMuted      bool   // New field to track mute status
-	Role         string // Debate role (for/against)
-	IsReady      bool   // Current ready status in this connection
+	Role         string // New field to track debate role (for/against)
 	SpeechText   string // New field to store speech text
 	ConnectionID string
 }
@@ -100,17 +99,6 @@ type TypingIndicator struct {
 	IsTyping    bool   `json:"isTyping"`
 	IsSpeaking  bool   `json:"isSpeaking"`
 	PartialText string `json:"partialText,omitempty"`
-}
-
-// Participant represents a user in a room (copied from routes to avoid circular dependency)
-type Participant struct {
-	ID        string `json:"id" bson:"id"`
-	Username  string `json:"username" bson:"username"`
-	Elo       int    `json:"elo" bson:"elo"`
-	AvatarURL string `json:"avatarUrl" bson:"avatarUrl,omitempty"`
-	Email     string `json:"email" bson:"email,omitempty"`
-	Role      string `json:"role" bson:"role,omitempty"`
-	IsReady   bool   `json:"isReady" bson:"isReady"`
 }
 
 var rooms = make(map[string]*Room)
@@ -167,86 +155,41 @@ func countSpectators(room *Room) int {
 	return count
 }
 
-func buildParticipantsMessage(room *Room, roomID string) map[string]interface{} {
+func buildParticipantsMessage(room *Room) map[string]interface{} {
 	room.Mutex.Lock()
+	defer room.Mutex.Unlock()
+
+	participants := make([]map[string]interface{}, 0, len(room.Clients))
 	spectatorCount := 0
+
 	for _, client := range room.Clients {
 		if client.IsSpectator {
 			spectatorCount++
+			continue
 		}
-	}
-	room.Mutex.Unlock()
 
-	// Source of truth for debaters: MongoDB
-	// This ensures users on different instances can see each other
-	var participants []map[string]interface{}
-	roomCollection := db.MongoDatabase.Collection("rooms")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	var dbRoom struct {
-		Participants []Participant `bson:"participants"`
-	}
-	log.Printf("[ws] Fetching participants from DB for room: '%s'", roomID)
-	err := roomCollection.FindOne(ctx, bson.M{"_id": roomID}).Decode(&dbRoom)
-	
-	if err == nil {
-		log.Printf("[ws] Found %d participants in DB for room %s", len(dbRoom.Participants), roomID)
-		for _, p := range dbRoom.Participants {
-			// Find if this participant is currently connected to THIS instance
-			// to potentially add extra real-time flags (isMuted, etc.)
-			isMuted := false
-			room.Mutex.Lock()
-			for _, client := range room.Clients {
-				if client.UserID == p.ID {
-					isMuted = client.IsMuted
-					break
-				}
-			}
-			room.Mutex.Unlock()
-
-			participants = append(participants, map[string]interface{}{
-				"id":          p.ID,
-				"displayName": p.Username,
-				"username":    p.Username,
-				"email":       p.Email,
-				"role":        p.Role,
-				"isReady":     p.IsReady,
-				"isMuted":     isMuted,
-				"avatarUrl":   p.AvatarURL,
-				"elo":         p.Elo,
-			})
-		}
-	} else {
-		log.Printf("[ws] Warning: could not fetch participants from DB for room %s: %v", roomID, err)
-		// Fallback to local clients if DB query fails
-		room.Mutex.Lock()
-		for _, client := range room.Clients {
-			if !client.IsSpectator {
-				participants = append(participants, map[string]interface{}{
-					"id":          client.UserID,
-					"displayName": client.Username,
-					"email":       client.Email,
-					"role":        client.Role,
-					"isMuted":     client.IsMuted,
-				})
-			}
-		}
-		room.Mutex.Unlock()
+		participants = append(participants, map[string]interface{}{
+			"id":          client.UserID,
+			"displayName": client.Username,
+			"email":       client.Email,
+			"role":        client.Role,
+			"isMuted":     client.IsMuted,
+		})
 	}
 
-	return map[string]interface{}{
+	message := map[string]interface{}{
 		"type":             "roomParticipants",
 		"roomParticipants": participants,
 		"spectatorCount":   spectatorCount,
 	}
+
+	return message
 }
 
-func broadcastParticipants(room *Room, roomID string) {
-	message := buildParticipantsMessage(room, roomID)
+func broadcastParticipants(room *Room) {
+	message := buildParticipantsMessage(room)
 	for _, client := range snapshotRecipients(room, nil) {
 		if err := client.SafeWriteJSON(message); err != nil {
-			log.Printf("[ws] Failed to broadcast participants to %s: %v", client.Email, err)
 		}
 	}
 }
@@ -316,7 +259,6 @@ func WebsocketHandler(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing room parameter"})
 		return
 	}
-	log.Printf("[ws] Connecting user %s to room %s", email, roomID)
 
 	// Get user details from database
 	userID, username, avatarURL, rating, err := getUserDetails(email)
@@ -325,29 +267,10 @@ func WebsocketHandler(c *gin.Context) {
 		return
 	}
 
-	// Create the room if it doesn't exist in memory.
+	// Create the room if it doesn't exist.
 	roomsMutex.Lock()
 	if _, exists := rooms[roomID]; !exists {
-		// Before creating a fresh empty room, check if it exists in MongoDB
-		// This handles cases where an instance might have restarted or users are on different instances
-		roomCollection := db.MongoDatabase.Collection("rooms")
-		var dbRoom struct {
-			ID           string        `bson:"_id"`
-			Type         string        `bson:"type"`
-			OwnerID      string        `bson:"ownerId"`
-			Participants []Participant `bson:"participants"`
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		
-		err := roomCollection.FindOne(ctx, bson.M{"_id": roomID}).Decode(&dbRoom)
-		if err == nil {
-			log.Printf("[ws] Reviving room %s from MongoDB (Participants: %d)", roomID, len(dbRoom.Participants))
-			rooms[roomID] = &Room{Clients: make(map[*websocket.Conn]*Client)}
-		} else {
-			// Brand new room
-			rooms[roomID] = &Room{Clients: make(map[*websocket.Conn]*Client)}
-		}
+		rooms[roomID] = &Room{Clients: make(map[*websocket.Conn]*Client)}
 	}
 	room := rooms[roomID]
 	roomsMutex.Unlock()
@@ -407,39 +330,16 @@ func WebsocketHandler(c *gin.Context) {
 		client.ConnectionID = uuid.New().String()
 	}
 
-	// Update MongoDB to include this user if they are a debater
-	if !isSpectator {
-		roomCollection := db.MongoDatabase.Collection("rooms")
-		updCtx, updCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer updCancel()
-		
-		participant := Participant{
-			ID:        userID,
-			Username:  username,
-			Elo:       rating,
-			AvatarURL: avatarURL,
-			Email:     email,
-		}
-		
-		// Add to set ensures we don't add duplicates if they refresh
-		result, err := roomCollection.UpdateOne(
-			updCtx, 
-			bson.M{"_id": roomID}, 
-			bson.M{"$addToSet": bson.M{"participants": participant}},
-		)
-		if err != nil {
-			log.Printf("[ws] Failed to add participant %s to mongo room %s: %v", email, roomID, err)
-		} else {
-			log.Printf("[ws] Room update result for %s: Matched=%d, Modified=%d", roomID, result.MatchedCount, result.ModifiedCount)
-		}
-	}
+	// Mark as spectator if needed (we can add a field to Client struct for this)
+	// For now, we'll handle it through the message handlers
 
-	// Send current participants to the new client (DB-backed)
+	// Send current participants to the new client
 	room.Mutex.Lock()
 	room.Clients[conn] = client
 	room.Mutex.Unlock()
 
-	participantsMsg := buildParticipantsMessage(room, roomID)
+	// Send participants list to newly connected client
+	participantsMsg := buildParticipantsMessage(room)
 	client.SafeWriteJSON(participantsMsg)
 
 	// Send existing participants' detailed info to the new client
@@ -484,7 +384,6 @@ func WebsocketHandler(c *gin.Context) {
 	// Broadcast new participant to other clients
 	for _, r := range snapshotRecipients(room, conn) {
 		r.SafeWriteJSON(userDetailsMessage)
-		// We call broadcastParticipants to keep everyone synced with the DB
 		r.SafeWriteJSON(participantsMsg)
 	}
 
@@ -529,7 +428,7 @@ func WebsocketHandler(c *gin.Context) {
 
 			// Broadcast updated participants to remaining clients
 			if clientCount > 0 {
-				broadcastParticipants(room, roomID)
+				broadcastParticipants(room)
 			}
 			break
 		}
@@ -765,18 +664,15 @@ func handleTopicChange(room *Room, conn *websocket.Conn, message Message, roomID
 
 // handleRoleSelection handles role selection
 func handleRoleSelection(room *Room, conn *websocket.Conn, message Message, roomID string) {
-	var userEmail string
 	// Store the role in the client
 	room.Mutex.Lock()
+	defer room.Mutex.Unlock()
 	if client, exists := room.Clients[conn]; exists {
 		if client.IsSpectator {
-			room.Mutex.Unlock()
 			return
 		}
 		client.Role = message.Role
-		userEmail = client.Email
 	}
-	room.Mutex.Unlock()
 
 	// Broadcast role selection to other clients
 	for _, r := range snapshotRecipients(room, conn) {
@@ -784,60 +680,17 @@ func handleRoleSelection(room *Room, conn *websocket.Conn, message Message, room
 		}
 	}
 
-	// Persist role to MongoDB for distributed instances
-	if userEmail != "" {
-		roomCollection := db.MongoDatabase.Collection("rooms")
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		filter := bson.M{"_id": roomID, "participants.email": userEmail}
-		update := bson.M{"$set": bson.M{"participants.$.role": message.Role}}
-		_, err := roomCollection.UpdateOne(ctx, filter, update)
-		if err != nil {
-			log.Printf("[ws] Failed to persist role in MongoDB for %s: %v", userEmail, err)
-		}
-	}
-
 	// Send updated participant snapshot to everyone
-	broadcastParticipants(room, roomID)
+	broadcastParticipants(room)
 }
 
 // handleReadyStatus handles ready status
 func handleReadyStatus(room *Room, conn *websocket.Conn, message Message, roomID string) {
-	var userEmail string
-	var isReady bool
-	if message.Ready != nil {
-		isReady = *message.Ready
-		room.Mutex.Lock()
-		if client, exists := room.Clients[conn]; exists {
-			client.IsReady = isReady
-			userEmail = client.Email
-		}
-		room.Mutex.Unlock()
-	}
-
 	// Broadcast ready status to other clients
 	for _, r := range snapshotRecipients(room, conn) {
 		if err := r.SafeWriteJSON(message); err != nil {
 		}
 	}
-
-	// Persist ready status to MongoDB for distributed instances
-	if userEmail != "" && message.Ready != nil {
-		roomCollection := db.MongoDatabase.Collection("rooms")
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		filter := bson.M{"_id": roomID, "participants.email": userEmail}
-		update := bson.M{"$set": bson.M{"participants.$.isReady": isReady}}
-		_, err := roomCollection.UpdateOne(ctx, filter, update)
-		if err != nil {
-			log.Printf("[ws] Failed to persist ready status in MongoDB for %s: %v", userEmail, err)
-		}
-	}
-
-	// Send updated participant snapshot to everyone
-	broadcastParticipants(room, roomID)
 }
 
 // handleMuteRequest handles mute requests
