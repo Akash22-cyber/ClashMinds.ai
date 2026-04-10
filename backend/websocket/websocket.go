@@ -404,8 +404,32 @@ func WebsocketHandler(c *gin.Context) {
 		client.ConnectionID = uuid.New().String()
 	}
 
-	// Mark as spectator if needed (we can add a field to Client struct for this)
-	// For now, we'll handle it through the message handlers
+	// Update MongoDB to include this user if they are a debater
+	if !isSpectator {
+		roomCollection := db.MongoDatabase.Collection("rooms")
+		updCtx, updCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer updCancel()
+		
+		participant := Participant{
+			ID:        userID,
+			Username:  username,
+			Elo:       rating,
+			AvatarURL: avatarURL,
+			Email:     email,
+		}
+		
+		// Add to set ensures we don't add duplicates if they refresh
+		_, err := roomCollection.UpdateOne(
+			updCtx, 
+			bson.M{"_id": roomID}, 
+			bson.M{"$addToSet": bson.M{"participants": participant}},
+		)
+		if err != nil {
+			log.Printf("[ws] Failed to add participant %s to mongo room %s: %v", email, roomID, err)
+		} else {
+			log.Printf("[ws] Added/verified participant %s in mongo room %s", email, roomID)
+		}
+	}
 
 	// Send current participants to the new client (DB-backed)
 	room.Mutex.Lock()
