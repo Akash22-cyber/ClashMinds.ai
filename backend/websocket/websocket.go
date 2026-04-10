@@ -49,7 +49,8 @@ type Client struct {
 	PartialText  string
 	LastActivity time.Time
 	IsMuted      bool   // New field to track mute status
-	Role         string // New field to track debate role (for/against)
+	Role         string // Debate role (for/against)
+	IsReady      bool   // Current ready status in this connection
 	SpeechText   string // New field to store speech text
 	ConnectionID string
 }
@@ -108,6 +109,8 @@ type Participant struct {
 	Elo       int    `json:"elo" bson:"elo"`
 	AvatarURL string `json:"avatarUrl" bson:"avatarUrl,omitempty"`
 	Email     string `json:"email" bson:"email,omitempty"`
+	Role      string `json:"role" bson:"role,omitempty"`
+	IsReady   bool   `json:"isReady" bson:"isReady"`
 }
 
 var rooms = make(map[string]*Room)
@@ -191,13 +194,10 @@ func buildParticipantsMessage(room *Room, roomID string) map[string]interface{} 
 			// Find if this participant is currently connected to THIS instance
 			// to potentially add extra real-time flags (isMuted, etc.)
 			isMuted := false
-			role := ""
-			
 			room.Mutex.Lock()
 			for _, client := range room.Clients {
 				if client.UserID == p.ID {
 					isMuted = client.IsMuted
-					role = client.Role
 					break
 				}
 			}
@@ -208,7 +208,8 @@ func buildParticipantsMessage(room *Room, roomID string) map[string]interface{} 
 				"displayName": p.Username,
 				"username":    p.Username,
 				"email":       p.Email,
-				"role":        role,
+				"role":        p.Role,
+				"isReady":     p.IsReady,
 				"isMuted":     isMuted,
 				"avatarUrl":   p.AvatarURL,
 				"elo":         p.Elo,
@@ -762,19 +763,36 @@ func handleTopicChange(room *Room, conn *websocket.Conn, message Message, roomID
 
 // handleRoleSelection handles role selection
 func handleRoleSelection(room *Room, conn *websocket.Conn, message Message, roomID string) {
+	var userEmail string
 	// Store the role in the client
 	room.Mutex.Lock()
-	defer room.Mutex.Unlock()
 	if client, exists := room.Clients[conn]; exists {
 		if client.IsSpectator {
+			room.Mutex.Unlock()
 			return
 		}
 		client.Role = message.Role
+		userEmail = client.Email
 	}
+	room.Mutex.Unlock()
 
 	// Broadcast role selection to other clients
 	for _, r := range snapshotRecipients(room, conn) {
 		if err := r.SafeWriteJSON(message); err != nil {
+		}
+	}
+
+	// Persist role to MongoDB for distributed instances
+	if userEmail != "" {
+		roomCollection := db.MongoDatabase.Collection("rooms")
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		filter := bson.M{"_id": roomID, "participants.email": userEmail}
+		update := bson.M{"$set": bson.M{"participants.$.role": message.Role}}
+		_, err := roomCollection.UpdateOne(ctx, filter, update)
+		if err != nil {
+			log.Printf("[ws] Failed to persist role in MongoDB for %s: %v", userEmail, err)
 		}
 	}
 
@@ -784,11 +802,40 @@ func handleRoleSelection(room *Room, conn *websocket.Conn, message Message, room
 
 // handleReadyStatus handles ready status
 func handleReadyStatus(room *Room, conn *websocket.Conn, message Message, roomID string) {
+	var userEmail string
+	var isReady bool
+	if message.Ready != nil {
+		isReady = *message.Ready
+		room.Mutex.Lock()
+		if client, exists := room.Clients[conn]; exists {
+			client.IsReady = isReady
+			userEmail = client.Email
+		}
+		room.Mutex.Unlock()
+	}
+
 	// Broadcast ready status to other clients
 	for _, r := range snapshotRecipients(room, conn) {
 		if err := r.SafeWriteJSON(message); err != nil {
 		}
 	}
+
+	// Persist ready status to MongoDB for distributed instances
+	if userEmail != "" && message.Ready != nil {
+		roomCollection := db.MongoDatabase.Collection("rooms")
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		filter := bson.M{"_id": roomID, "participants.email": userEmail}
+		update := bson.M{"$set": bson.M{"participants.$.isReady": isReady}}
+		_, err := roomCollection.UpdateOne(ctx, filter, update)
+		if err != nil {
+			log.Printf("[ws] Failed to persist ready status in MongoDB for %s: %v", userEmail, err)
+		}
+	}
+
+	// Send updated participant snapshot to everyone
+	broadcastParticipants(room, roomID)
 }
 
 // handleMuteRequest handles mute requests
