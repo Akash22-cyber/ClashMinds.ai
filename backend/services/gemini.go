@@ -24,12 +24,8 @@ func generateModelText(ctx context.Context, modelName, prompt string) (string, e
 	}
 
 	config := &genai.GenerateContentConfig{
-		SafetySettings: []*genai.SafetySetting{
-			{Category: genai.HarmCategoryHarassment, Threshold: genai.HarmBlockThresholdBlockNone},
-			{Category: genai.HarmCategoryHateSpeech, Threshold: genai.HarmBlockThresholdBlockNone},
-			{Category: genai.HarmCategorySexuallyExplicit, Threshold: genai.HarmBlockThresholdBlockNone},
-			{Category: genai.HarmCategoryDangerousContent, Threshold: genai.HarmBlockThresholdBlockNone},
-		},
+		// Default safety settings are used here, as BlockNone requires special API key permissions
+		// and will throw a 400 Bad Request error on standard free-tier keys.
 	}
 
 	resp, err := geminiClient.Models.GenerateContent(ctx, defaultGeminiModel, genai.Text(prompt), config)

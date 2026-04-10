@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"clashminds/db"
+	"clashminds/models"
 	"clashminds/services"
 
 	"github.com/gin-gonic/gin"
@@ -44,7 +45,8 @@ func generateRoomID() string {
 // CreateRoomHandler handles POST /rooms and creates a new debate room.
 func CreateRoomHandler(c *gin.Context) {
 	type CreateRoomInput struct {
-		Type string `json:"type"` // public, private, invite
+		Type       string `json:"type"` // public, private, invite
+		OpponentID string `json:"opponentId,omitempty"`
 	}
 
 	var input CreateRoomInput
@@ -101,6 +103,27 @@ func CreateRoomHandler(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create room"})
 		return
+	}
+
+	// Send notification if an opponent was specified
+	if input.OpponentID != "" && input.OpponentID != user.ID.Hex() {
+		opponentObjID, err := primitive.ObjectIDFromHex(input.OpponentID)
+		if err == nil {
+			// Check if opponent exists
+			var opponent struct {
+				ID primitive.ObjectID `bson:"_id"`
+			}
+			err = userCollection.FindOne(ctx, bson.M{"_id": opponentObjID}).Decode(&opponent)
+			if err == nil {
+				_ = services.CreateNotification(
+					opponentObjID,
+					models.NotificationTypeInvite,
+					"Debate Challenge",
+					"You have been challenged to a debate by "+user.DisplayName+".",
+					"/debate-room/"+roomID,
+				)
+			}
+		}
 	}
 
 	c.JSON(http.StatusOK, newRoom)

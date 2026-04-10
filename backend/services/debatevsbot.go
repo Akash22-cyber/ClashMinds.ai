@@ -279,6 +279,7 @@ func GenerateBotResponse(botName, botLevel, topic string, history []models.Messa
 	ctx := context.Background()
 	response, err := generateDefaultModelText(ctx, prompt)
 	if err != nil {
+		log.Printf("Gemini Generation Error: %v\nPrompt: %s", err, prompt)
 		return personalityErrorResponse(botName, "A glitch in my logic, there is.")
 	}
 	if response == "" {
