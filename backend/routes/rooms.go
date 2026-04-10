@@ -33,8 +33,6 @@ type Participant struct {
 	Elo       int    `json:"elo" bson:"elo"`
 	AvatarURL string `json:"avatarUrl" bson:"avatarUrl,omitempty"`
 	Email     string `json:"email" bson:"email,omitempty"`
-	Role      string `json:"role" bson:"role,omitempty"`
-	IsReady   bool   `json:"isReady" bson:"isReady"`
 }
 
 // generateRoomID creates a random six-digit room ID as a string.
@@ -65,7 +63,7 @@ func CreateRoomHandler(c *gin.Context) {
 	}
 
 	// Query user document using email
-	userCollection := db.MongoDatabase.Collection("users")
+	userCollection := db.MongoClient.Database("DebateAI").Collection("users")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -100,7 +98,7 @@ func CreateRoomHandler(c *gin.Context) {
 		Participants: []Participant{creatorParticipant},
 	}
 
-	roomCollection := db.MongoDatabase.Collection("rooms")
+	roomCollection := db.MongoClient.Database("DebateAI").Collection("rooms")
 	_, err = roomCollection.InsertOne(ctx, newRoom)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create room"})
@@ -134,7 +132,7 @@ func CreateRoomHandler(c *gin.Context) {
 // GetRoomsHandler handles GET /rooms and returns all rooms.
 func GetRoomsHandler(c *gin.Context) {
 
-	collection := db.MongoDatabase.Collection("rooms")
+	collection := db.MongoClient.Database("DebateAI").Collection("rooms")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -165,7 +163,7 @@ func JoinRoomHandler(c *gin.Context) {
 	}
 
 	// Query user document using email
-	userCollection := db.MongoDatabase.Collection("users")
+	userCollection := db.MongoClient.Database("DebateAI").Collection("users")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -199,7 +197,7 @@ func JoinRoomHandler(c *gin.Context) {
 	}
 
 	// Use atomic operation to join room
-	roomCollection := db.MongoDatabase.Collection("rooms")
+	roomCollection := db.MongoClient.Database("DebateAI").Collection("rooms")
 	filter := bson.M{"_id": roomId}
 	update := bson.M{
 		"$addToSet": bson.M{"participants": participant},
@@ -231,19 +229,15 @@ func GetRoomParticipantsHandler(c *gin.Context) {
 	}
 
 	// Query room document
-	roomCollection := db.MongoDatabase.Collection("rooms")
-	userCollection := db.MongoDatabase.Collection("users")
+	roomCollection := db.MongoClient.Database("DebateAI").Collection("rooms")
+	userCollection := db.MongoClient.Database("DebateAI").Collection("users")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	var room Room
 	err := roomCollection.FindOne(ctx, bson.M{"_id": roomId}).Decode(&room)
 	if err != nil {
-		// Instead of 404, return a status indicating the room is being prepared
-		c.JSON(http.StatusOK, gin.H{
-			"status": "initializing",
-			"error":  "Room not found in database yet",
-		})
+		c.JSON(http.StatusNotFound, gin.H{"error": "Room not found"})
 		return
 	}
 
