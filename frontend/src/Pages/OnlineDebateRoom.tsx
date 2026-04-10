@@ -1108,12 +1108,14 @@ const OnlineDebateRoom = (): JSX.Element => {
                 avatarUrl: currentUser.avatarUrl,
               });
             }
+        }
+          
+          if (!response.ok) {
+            console.warn(
+              "Room participants API returned status:",
+              response.status
+            );
           }
-          console.error(
-            "API response not ok:",
-            response.status,
-            response.statusText
-          );
 
           // If room not found (initializing), return false to let the orchestrator handle it
           if (response.status === 200) {
@@ -1123,7 +1125,6 @@ const OnlineDebateRoom = (): JSX.Element => {
             }
           }
 
-          // Fallback: use current user as local user and create a placeholder opponent
           if (currentUser) {
             const fallbackLocalUser = {
               id: currentUser.id || "",
@@ -1149,27 +1150,37 @@ const OnlineDebateRoom = (): JSX.Element => {
             avatarUrl: currentUser.avatarUrl,
             displayName: currentUser.displayName,
           };
-          console.warn(
-            "Setting error fallback local user:",
-            errorFallbackLocalUser
-          );
           setLocalUser(errorFallbackLocalUser);
           setRoomOwnerId((prev) => prev ?? currentUser.id ?? null);
         }
       } finally {
-        // Only set loading to false if we didn't return early
         setIsLoading(false);
       }
       return true;
     },
-    [
-      setIsLoading,
-      setLocalUser,
-      setOpponentUser,
-      setRoomOwnerId,
-      setRoomParticipants,
-    ]
+    [roomId, currentUser, setRoomOwnerId, setIsLoading, setLocalUser, setOpponentUser, setRoomParticipants]
   );
+
+  // Robust Lobby Polling Fallback
+  // This ensures participants are synced even if WebSocket broadcasts are split across instances
+  useEffect(() => {
+    let pollingInterval: NodeJS.Timeout | null = null;
+
+    if (debatePhase === DebatePhase.Setup && roomId && isRoomReady) {
+      console.log("[Lobby] Starting participant polling fallback...");
+      pollingInterval = setInterval(() => {
+        // Poll for participants every 5 seconds while in setup
+        fetchRoomParticipants();
+      }, 5000);
+    }
+
+    return () => {
+      if (pollingInterval) {
+        console.log("[Lobby] Stopping participant polling...");
+        clearInterval(pollingInterval);
+      }
+    };
+  }, [debatePhase, roomId, isRoomReady, fetchRoomParticipants]);
 
   // New Sequential Initialization Logic
   useEffect(() => {
