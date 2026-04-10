@@ -66,8 +66,6 @@ const handleGoogleLogin = useCallback(
           text: 'signin_with',
           width: '100%',
         });
-        // Explicitly trigger the One Tap prompt
-        google.accounts.id.prompt();
       }
       return true;
     };
@@ -195,8 +193,6 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ startOtpVerification }) 
           text: 'signup_with',
           width: '100%',
         });
-        // Explicitly trigger the One Tap prompt
-        google.accounts.id.prompt();
       }
       return true;
     };

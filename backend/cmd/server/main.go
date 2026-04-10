@@ -186,5 +186,15 @@ func setupRouter(cfg *config.Config) *gin.Engine {
 	// FIX: Use websocket.DebateWebsocketHandler (moved to websocket package)
 	router.GET("/ws/debate/:debateID", websocket.DebateWebsocketHandler)
 
+	// Serve static files from the dist directory (Vite build)
+	router.Static("/assets", "./dist/assets")
+	router.StaticFile("/favicon.ico", "./dist/favicon.ico")
+	router.StaticFile("/vite.svg", "./dist/vite.svg")
+	
+	// SPA catch-all: serve index.html for any route not matched by the API
+	router.NoRoute(func(c *gin.Context) {
+		c.File("./dist/index.html")
+	})
+
 	return router
 }
