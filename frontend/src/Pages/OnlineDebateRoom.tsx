@@ -5,8 +5,15 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "../components/ui/button";
+import { 
+  Mic, 
+  MicOff, 
+  Video, 
+  VideoOff, 
+  LogOut 
+} from "lucide-react";
 
 import JudgmentPopup from "@/components/JudgementPopup";
 import SpeechTranscripts from "@/components/SpeechTranscripts";
@@ -237,6 +244,28 @@ const OnlineDebateRoom = (): JSX.Element => {
   const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
   const [audioError, setAudioError] = useState<string | null>(null);
   const [isManualRecording, setIsManualRecording] = useState(false);
+
+  const [isMicMuted, setIsMicMuted] = useState(false);
+  const [isCameraOff, setIsCameraOff] = useState(false);
+  const navigate = useNavigate();
+
+  const toggleMic = useCallback(() => {
+    if (localStream) {
+      localStream.getAudioTracks().forEach((track) => {
+        track.enabled = !track.enabled;
+      });
+      setIsMicMuted((prev) => !prev);
+    }
+  }, [localStream]);
+
+  const toggleCamera = useCallback(() => {
+    if (localStream) {
+      localStream.getVideoTracks().forEach((track) => {
+        track.enabled = !track.enabled;
+      });
+      setIsCameraOff((prev) => !prev);
+    }
+  }, [localStream]);
 
   // Speech recognition state
   const [isListening, setIsListening] = useState(false);
@@ -832,24 +861,29 @@ const OnlineDebateRoom = (): JSX.Element => {
     startJudgmentPolling,
   ]);
 
-  const handleConcede = useCallback(() => {
-    if (window.confirm("Are you sure you want to concede? This will count as a loss.")) {
+  const handleEndDebate = useCallback(() => {
+    if (
+      window.confirm(
+        "Are you sure you want to end this debate? You will be redirected to your dashboard to see the analysis."
+      )
+    ) {
       if (wsRef.current) {
-        wsRef.current.send(JSON.stringify({
-          type: "concede",
-          room: roomId,
-          userId: currentUserId,
-          username: currentUser?.displayName || "User"
-        }));
+        wsRef.current.send(
+          JSON.stringify({
+            type: "concede", // Keeping 'concede' message for backend rating logic
+            room: roomId,
+            userId: currentUserId,
+            username: currentUser?.displayName || "User",
+          })
+        );
       }
       setDebatePhase(DebatePhase.Finished);
-      setPopup({
-        show: true,
-        message: "You have conceded the debate.",
-        isJudging: false,
-      });
+      // Wait a moment for transcripts to submit before navigating
+      setTimeout(() => {
+        navigate("/profile");
+      }, 2000);
     }
-  }, [roomId, currentUserId, currentUser, setDebatePhase, setPopup]);
+  }, [roomId, currentUserId, currentUser, setDebatePhase, navigate]);
 
   const handlePhaseDone = useCallback(() => {
     const currentIndex = phaseOrder.indexOf(debatePhase);
@@ -2076,13 +2110,18 @@ const OnlineDebateRoom = (): JSX.Element => {
 
   // Manage setup popup visibility
   useEffect(() => {
-    if (localReady && peerReady) {
-      setShowSetupPopup(false);
-      setCountdown(3);
-    } else {
+    // Only show popup during Setup phase or if roles aren't fully ready
+    if (debatePhase === DebatePhase.Setup && !(localReady && peerReady)) {
       setShowSetupPopup(true);
+    } else if (localReady && peerReady) {
+      // Small delay to ensure users see the "Ready" status before it vanishes
+      const timer = setTimeout(() => {
+        setShowSetupPopup(false);
+        if (countdown === null) setCountdown(3);
+      }, 500);
+      return () => clearTimeout(timer);
     }
-  }, [localReady, peerReady]);
+  }, [localReady, peerReady, debatePhase, countdown]);
 
   // Countdown logic
   useEffect(() => {
@@ -2178,10 +2217,12 @@ const OnlineDebateRoom = (): JSX.Element => {
           {debatePhase !== DebatePhase.Finished && debatePhase !== DebatePhase.Setup && (
             <div className="mt-2">
               <Button
-                onClick={handleConcede}
-                className="bg-red-500 hover:bg-red-600 text-white rounded-md px-3 text-sm"
+                onClick={handleEndDebate}
+                variant="destructive"
+                className="rounded-md px-4 py-1 text-sm flex items-center gap-2 mx-auto"
               >
-                Concede
+                <LogOut className="w-4 h-4" />
+                End Debate
               </Button>
             </div>
           )}
@@ -2469,13 +2510,52 @@ const OnlineDebateRoom = (): JSX.Element => {
               Time:{" "}
               {formatTime(isMyTurn ? timer : phaseDurations[debatePhase] || 0)}
             </p>
-            <video
-              ref={localVideoRef}
-              autoPlay
-              muted
-              playsInline
-              className="w-full h-80 object-cover"
-            />
+            <div className="relative group">
+              <video
+                ref={localVideoRef}
+                autoPlay
+                muted
+                playsInline
+                className={`w-full h-80 object-cover rounded-lg ${
+                  isCameraOff ? "opacity-0" : "opacity-100"
+                } transition-opacity duration-300`}
+              />
+              {isCameraOff && (
+                <div className="absolute inset-0 flex items-center justify-center bg-gray-900 rounded-lg">
+                  <VideoOff className="w-16 h-16 text-gray-600" />
+                </div>
+              )}
+              {/* Media Controls Overlay */}
+              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1.5 bg-black/60 backdrop-blur-md rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                <button
+                  onClick={toggleMic}
+                  className={`p-2 rounded-full ${
+                    isMicMuted ? "bg-red-500 text-white" : "text-white hover:bg-white/20"
+                  }`}
+                  title={isMicMuted ? "Unmute" : "Mute"}
+                >
+                  {isMicMuted ? (
+                    <MicOff className="w-5 h-5" />
+                  ) : (
+                    <Mic className="w-5 h-5" />
+                  )}
+                </button>
+                <button
+                  onClick={toggleCamera}
+                  className={`p-2 rounded-full ${
+                    isCameraOff ? "bg-red-500 text-white" : "text-white hover:bg-white/20"
+                  }`}
+                  title={isCameraOff ? "Turn Camera On" : "Turn Camera Off"}
+                >
+                  {isCameraOff ? (
+                    <VideoOff className="w-5 h-5" />
+                  ) : (
+                    <Video className="w-5 h-5" />
+                  )}
+                </button>
+              </div>
+            </div>
+
             {/* Speaking Controls */}
             <div className="mt-3 flex flex-col items-center gap-2">
               <Button
