@@ -237,7 +237,11 @@ func GetRoomParticipantsHandler(c *gin.Context) {
 	var room Room
 	err := roomCollection.FindOne(ctx, bson.M{"_id": roomId}).Decode(&room)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Room not found"})
+		// Instead of 404, return a status indicating the room is being prepared
+		c.JSON(http.StatusOK, gin.H{
+			"status": "initializing",
+			"error":  "Room not found in database yet",
+		})
 		return
 	}
 

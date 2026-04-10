@@ -253,6 +253,7 @@ const OnlineDebateRoom = (): JSX.Element => {
 
   const [isMicMuted, setIsMicMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
+  const [isRoomReady, setIsRoomReady] = useState(false);
   const navigate = useNavigate();
 
   const toggleMic = useCallback(() => {
@@ -1000,7 +1001,7 @@ const OnlineDebateRoom = (): JSX.Element => {
 
   // Function to fetch room participants
   const fetchRoomParticipants = useCallback(
-    async (retryCount = 0) => {
+    async () => {
       if (!roomId) return;
 
       setIsLoading(true);
@@ -1110,30 +1111,18 @@ const OnlineDebateRoom = (): JSX.Element => {
               });
             }
           }
-        } else {
           console.error(
             "API response not ok:",
             response.status,
             response.statusText
           );
 
-          // If room not found (404), it might still be being created
-          if (response.status === 404 && retryCount < 5) {
-            console.warn(
-              `Room not found, might still be creating. Retry ${
-                retryCount + 1
-              }/5 in 2 seconds...`
-            );
-
-            // Try to create the room if it's the first retry
-            if (retryCount === 0) {
-              await createRoomIfNeeded();
+          // If room not found (initializing), return false to let the orchestrator handle it
+          if (response.status === 200) {
+            const data = await response.json();
+            if (data.status === "initializing") {
+               return false;
             }
-
-            setTimeout(() => {
-              fetchRoomParticipants(retryCount + 1);
-            }, 2000);
-            return;
           }
 
           // Fallback: use current user as local user and create a placeholder opponent
@@ -1170,13 +1159,12 @@ const OnlineDebateRoom = (): JSX.Element => {
           setRoomOwnerId((prev) => prev ?? currentUser.id ?? null);
         }
       } finally {
+        // Only set loading to false if we didn't return early
         setIsLoading(false);
       }
+      return true;
     },
     [
-      roomId,
-      currentUser,
-      createRoomIfNeeded,
       setIsLoading,
       setLocalUser,
       setOpponentUser,
@@ -1185,9 +1173,57 @@ const OnlineDebateRoom = (): JSX.Element => {
     ]
   );
 
+  // New Sequential Initialization Logic
+  useEffect(() => {
+    let isMounted = true;
+    
+    const initialize = async () => {
+      if (!roomId || !currentUser) return;
+      
+      setIsLoading(true);
+      console.log(`Starting room initialization for: ${roomId}`);
+
+      try {
+        // Step 1: Attempt to fetch participants (Check if room exists)
+        let ready = await fetchRoomParticipants();
+        
+        // Step 2: If not found, attempt to create
+        if (!ready) {
+           console.log("Room not found, attempting creation...");
+           const created = await createRoomIfNeeded();
+           if (!created) {
+             console.error("Critical: Could not create or find room.");
+             setIsLoading(false);
+             return;
+           }
+           
+           // Small delay for DB consistency before final fetch
+           await new Promise(resolve => setTimeout(resolve, 1000));
+           ready = await fetchRoomParticipants();
+        }
+
+        if (ready && isMounted) {
+          console.log("Room is ready for connection.");
+          setIsRoomReady(true);
+        }
+      } catch (err) {
+        console.error("Initialization failed:", err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+
+    initialize();
+    
+    return () => { isMounted = false; };
+  }, [roomId, currentUser, createRoomIfNeeded, fetchRoomParticipants, setIsLoading]);
+
   // Initialize WebSocket, RTCPeerConnection, and media
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
+    // ONLY initialize if the room is confirmed ready
+    if (!isRoomReady) return;
+
     const token = getAuthToken();
     if (!token || !roomId) return;
 
@@ -1204,10 +1240,6 @@ const OnlineDebateRoom = (): JSX.Element => {
 
     rws.onopen = () => {
       rws.send(JSON.stringify({ type: "join", room: roomId }));
-      // Wait a bit before fetching participants to ensure room is fully created
-      setTimeout(() => {
-        fetchRoomParticipants();
-      }, 1000);
       getMedia();
       flushSpectatorOfferQueue();
     };
