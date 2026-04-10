@@ -1216,7 +1216,7 @@ const OnlineDebateRoom = (): JSX.Element => {
       const data: WSMessage = JSON.parse(event.data);
       switch (data.type) {
         case "topicChange":
-          if (data.topic !== undefined) {
+          if (data.topic !== undefined && data.userId !== currentUser?.id) {
             setTopic(data.topic);
             if (!isTypingTopicRef.current) {
               setLocalTopic(data.topic);
@@ -2121,13 +2121,17 @@ const OnlineDebateRoom = (): JSX.Element => {
       clearTimeout(debounceTimeoutRef.current);
     }
 
-    // Set new debounce timeout
+    // Set new debounce timeout (300ms for snappier sync)
     debounceTimeoutRef.current = setTimeout(() => {
       isTypingTopicRef.current = false;
       setTopic(newTopic);
-      const message = JSON.stringify({ type: "topicChange", topic: newTopic });
+      const message = JSON.stringify({ 
+        type: "topicChange", 
+        topic: newTopic,
+        userId: currentUser?.id 
+      });
       wsRef.current?.send(message);
-    }, 500);
+    }, 300);
   };
 
   const applyVoiceToTopic = () => {
@@ -2318,6 +2322,17 @@ const OnlineDebateRoom = (): JSX.Element => {
                       list="topics-list"
                       value={localTopic}
                       onChange={handleTopicChange}
+                      onFocus={() => { isTypingTopicRef.current = true; }}
+                      onBlur={() => { 
+                        isTypingTopicRef.current = false;
+                        // Sync one last time on blur to ensure consistency
+                        setTopic(localTopic);
+                        wsRef.current?.send(JSON.stringify({ 
+                          type: "topicChange", 
+                          topic: localTopic,
+                          userId: currentUser?.id 
+                        }));
+                      }}
                       placeholder="Select a topic or enter custom..."
                       className="border border-border rounded-lg p-3 w-full bg-input text-foreground focus:ring-2 focus:ring-orange-400 focus:border-transparent transition-all outline-none"
                     />
