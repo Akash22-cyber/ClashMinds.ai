@@ -2202,10 +2202,16 @@ const OnlineDebateRoom = (): JSX.Element => {
     }
   }, [countdown, localRole]);
 
-  // Clear input fields on phase change
+  // Mute microphone during Setup phase for privacy and silence
   useEffect(() => {
-    // Clear any audio-related state if needed
-  }, [debatePhase]);
+    if (debatePhase === DebatePhase.Setup && localStream) {
+      const audioTrack = localStream.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = false;
+        console.debug("Microphone disabled for Setup phase lobby.");
+      }
+    }
+  }, [debatePhase, localStream]);
 
   useEffect(() => {
     manualRecordingRef.current = isManualRecording;
@@ -2486,13 +2492,21 @@ const OnlineDebateRoom = (): JSX.Element => {
                   </div>
                 </div>
                 {/* Ready Button */}
-                <div>
+                <div className="space-y-2">
+                  {(!localRole || !localTopic.trim()) && (
+                    <p className="text-[10px] text-orange-500 text-center animate-pulse">
+                      Select a topic and a role (For/Against) to start.
+                    </p>
+                  )}
                   <Button
                     onClick={toggleReady}
+                    disabled={!localRole || !localTopic.trim()}
                     className={`w-full py-2 rounded-lg transition ${
                       localReady
                         ? "bg-destructive text-destructive-foreground"
-                        : "bg-accent text-accent-foreground"
+                        : (!localRole || !localTopic.trim())
+                          ? "bg-muted text-muted-foreground cursor-not-allowed"
+                          : "bg-accent text-accent-foreground"
                     }`}
                   >
                     {localReady ? "Cancel Ready" : "I'm Ready"}
