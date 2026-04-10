@@ -275,6 +275,11 @@ const OnlineDebateRoom = (): JSX.Element => {
   const retryCountRef = useRef<number>(0);
   const manualRecordingRef = useRef(false);
 
+  // Keep localStreamRef in sync with localStream state
+  useEffect(() => {
+    localStreamRef.current = localStream;
+  }, [localStream]);
+
   const cleanupSpectatorConnection = useCallback((connectionId: string) => {
     const pc = spectatorPCsRef.current.get(connectionId);
     if (pc) {
@@ -1480,7 +1485,8 @@ const OnlineDebateRoom = (): JSX.Element => {
 
     pc.ontrack = (event) => {
       if (event.streams && event.streams[0]) {
-        setRemoteStream((prev) => prev || event.streams[0]);
+        console.debug("Received remote stream:", event.streams[0].id);
+        setRemoteStream(event.streams[0]);
       }
     };
 
@@ -1491,6 +1497,7 @@ const OnlineDebateRoom = (): JSX.Element => {
           audio: true,
         });
         setLocalStream(stream);
+        localStreamRef.current = stream;
 
         stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
