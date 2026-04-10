@@ -1224,10 +1224,10 @@ const OnlineDebateRoom = (): JSX.Element => {
           }
           break;
         case "roleSelection":
-          if (data.role) setPeerRole(data.role);
+          if (data.role && data.userId !== currentUser?.id) setPeerRole(data.role);
           break;
         case "ready":
-          if (data.ready !== undefined) setPeerReady(data.ready);
+          if (data.ready !== undefined && data.userId !== currentUser?.id) setPeerReady(data.ready);
           break;
         case "phaseChange":
           if (data.phase) {
@@ -2159,7 +2159,11 @@ const OnlineDebateRoom = (): JSX.Element => {
       return;
     }
     setLocalRole(role);
-    const message = JSON.stringify({ type: "roleSelection", role });
+    const message = JSON.stringify({ 
+      type: "roleSelection", 
+      role, 
+      userId: currentUser?.id 
+    });
     wsRef.current?.send(message);
   };
 
@@ -2167,7 +2171,11 @@ const OnlineDebateRoom = (): JSX.Element => {
     const newReadyState = !localReady;
     setLocalReady(newReadyState);
     wsRef.current?.send(
-      JSON.stringify({ type: "ready", ready: newReadyState })
+      JSON.stringify({ 
+        type: "ready", 
+        ready: newReadyState, 
+        userId: currentUser?.id 
+      })
     );
   };
 
@@ -2270,12 +2278,18 @@ const OnlineDebateRoom = (): JSX.Element => {
             Spectators: <span className="font-medium">{spectatorPresence}</span>{" "}
             | Current Turn:{" "}
             <span className="font-semibold text-orange-600">
-              {isMyTurn ? "You" : "Opponent"} to{" "}
-              {debatePhase.includes("Question")
-                ? "ask a question"
-                : debatePhase.includes("Answer")
-                ? "answer"
-                : "make a statement"}
+              {debatePhase === DebatePhase.Setup ? (
+                "Waiting for debate to start..."
+              ) : (
+                <>
+                  {isMyTurn ? "You" : "Opponent"} to{" "}
+                  {debatePhase.includes("Question")
+                    ? "ask a question"
+                    : debatePhase.includes("Answer")
+                    ? "answer"
+                    : "make a statement"}
+                </>
+              )}
             </span>
             {isAutoMuted && (
               <span className="ml-2 text-red-500 font-medium">
