@@ -164,41 +164,86 @@ func countSpectators(room *Room) int {
 	return count
 }
 
-func buildParticipantsMessage(room *Room) map[string]interface{} {
+func buildParticipantsMessage(room *Room, roomID string) map[string]interface{} {
 	room.Mutex.Lock()
-	defer room.Mutex.Unlock()
-
-	participants := make([]map[string]interface{}, 0, len(room.Clients))
 	spectatorCount := 0
-
 	for _, client := range room.Clients {
 		if client.IsSpectator {
 			spectatorCount++
-			continue
 		}
+	}
+	room.Mutex.Unlock()
 
-		participants = append(participants, map[string]interface{}{
-			"id":          client.UserID,
-			"displayName": client.Username,
-			"email":       client.Email,
-			"role":        client.Role,
-			"isMuted":     client.IsMuted,
-		})
+	// Source of truth for debaters: MongoDB
+	// This ensures users on different instances can see each other
+	var participants []map[string]interface{}
+	roomCollection := db.MongoDatabase.Collection("rooms")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var dbRoom struct {
+		Participants []Participant `bson:"participants"`
+	}
+	err := roomCollection.FindOne(ctx, bson.M{"_id": roomID}).Decode(&dbRoom)
+	
+	if err == nil {
+		for _, p := range dbRoom.Participants {
+			// Find if this participant is currently connected to THIS instance
+			// to potentially add extra real-time flags (isMuted, etc.)
+			isMuted := false
+			role := ""
+			
+			room.Mutex.Lock()
+			for _, client := range room.Clients {
+				if client.UserID == p.ID {
+					isMuted = client.IsMuted
+					role = client.Role
+					break
+				}
+			}
+			room.Mutex.Unlock()
+
+			participants = append(participants, map[string]interface{}{
+				"id":          p.ID,
+				"displayName": p.Username,
+				"username":    p.Username,
+				"email":       p.Email,
+				"role":        role,
+				"isMuted":     isMuted,
+				"avatarUrl":   p.AvatarURL,
+				"elo":         p.Elo,
+			})
+		}
+	} else {
+		log.Printf("[ws] Warning: could not fetch participants from DB for room %s: %v", roomID, err)
+		// Fallback to local clients if DB query fails
+		room.Mutex.Lock()
+		for _, client := range room.Clients {
+			if !client.IsSpectator {
+				participants = append(participants, map[string]interface{}{
+					"id":          client.UserID,
+					"displayName": client.Username,
+					"email":       client.Email,
+					"role":        client.Role,
+					"isMuted":     client.IsMuted,
+				})
+			}
+		}
+		room.Mutex.Unlock()
 	}
 
-	message := map[string]interface{}{
+	return map[string]interface{}{
 		"type":             "roomParticipants",
 		"roomParticipants": participants,
 		"spectatorCount":   spectatorCount,
 	}
-
-	return message
 }
 
-func broadcastParticipants(room *Room) {
-	message := buildParticipantsMessage(room)
+func broadcastParticipants(room *Room, roomID string) {
+	message := buildParticipantsMessage(room, roomID)
 	for _, client := range snapshotRecipients(room, nil) {
 		if err := client.SafeWriteJSON(message); err != nil {
+			log.Printf("[ws] Failed to broadcast participants to %s: %v", client.Email, err)
 		}
 	}
 }
@@ -362,13 +407,12 @@ func WebsocketHandler(c *gin.Context) {
 	// Mark as spectator if needed (we can add a field to Client struct for this)
 	// For now, we'll handle it through the message handlers
 
-	// Send current participants to the new client
+	// Send current participants to the new client (DB-backed)
 	room.Mutex.Lock()
 	room.Clients[conn] = client
 	room.Mutex.Unlock()
 
-	// Send participants list to newly connected client
-	participantsMsg := buildParticipantsMessage(room)
+	participantsMsg := buildParticipantsMessage(room, roomID)
 	client.SafeWriteJSON(participantsMsg)
 
 	// Send existing participants' detailed info to the new client
@@ -413,6 +457,7 @@ func WebsocketHandler(c *gin.Context) {
 	// Broadcast new participant to other clients
 	for _, r := range snapshotRecipients(room, conn) {
 		r.SafeWriteJSON(userDetailsMessage)
+		// We call broadcastParticipants to keep everyone synced with the DB
 		r.SafeWriteJSON(participantsMsg)
 	}
 
@@ -457,7 +502,7 @@ func WebsocketHandler(c *gin.Context) {
 
 			// Broadcast updated participants to remaining clients
 			if clientCount > 0 {
-				broadcastParticipants(room)
+				broadcastParticipants(room, roomID)
 			}
 			break
 		}
@@ -710,7 +755,7 @@ func handleRoleSelection(room *Room, conn *websocket.Conn, message Message, room
 	}
 
 	// Send updated participant snapshot to everyone
-	broadcastParticipants(room)
+	broadcastParticipants(room, roomID)
 }
 
 // handleReadyStatus handles ready status
