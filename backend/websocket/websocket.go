@@ -101,6 +101,15 @@ type TypingIndicator struct {
 	PartialText string `json:"partialText,omitempty"`
 }
 
+// Participant represents a user in a room (copied from routes to avoid circular dependency)
+type Participant struct {
+	ID        string `json:"id" bson:"id"`
+	Username  string `json:"username" bson:"username"`
+	Elo       int    `json:"elo" bson:"elo"`
+	AvatarURL string `json:"avatarUrl" bson:"avatarUrl,omitempty"`
+	Email     string `json:"email" bson:"email,omitempty"`
+}
+
 var rooms = make(map[string]*Room)
 var roomsMutex sync.Mutex
 
@@ -280,6 +289,8 @@ func WebsocketHandler(c *gin.Context) {
 			OwnerID      string        `bson:"ownerId"`
 			Participants []Participant `bson:"participants"`
 		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 		
 		err := roomCollection.FindOne(ctx, bson.M{"_id": roomID}).Decode(&dbRoom)
 		if err == nil {
