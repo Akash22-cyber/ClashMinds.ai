@@ -12,7 +12,9 @@ import {
   MicOff, 
   Video, 
   VideoOff, 
-  LogOut 
+  LogOut,
+  Check,
+  Sparkles
 } from "lucide-react";
 
 import JudgmentPopup from "@/components/JudgementPopup";
@@ -214,6 +216,10 @@ const OnlineDebateRoom = (): JSX.Element => {
 
   // State for debate setup and signaling
   const [topic, setTopic] = useState("");
+  const [localTopic, setLocalTopic] = useState("");
+  const [speechTopicBuffer, setSpeechTopicBuffer] = useState("");
+  const isTypingTopicRef = useRef(false);
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [localRole, setLocalRole] = useState<DebateRole | null>(null);
   const [peerRole, setPeerRole] = useState<DebateRole | null>(null);
   const [localReady, setLocalReady] = useState(false);
@@ -1210,7 +1216,12 @@ const OnlineDebateRoom = (): JSX.Element => {
       const data: WSMessage = JSON.parse(event.data);
       switch (data.type) {
         case "topicChange":
-          if (data.topic !== undefined) setTopic(data.topic);
+          if (data.topic !== undefined) {
+            setTopic(data.topic);
+            if (!isTypingTopicRef.current) {
+              setLocalTopic(data.topic);
+            }
+          }
           break;
         case "roleSelection":
           if (data.role) setPeerRole(data.role);
@@ -1704,35 +1715,39 @@ const OnlineDebateRoom = (): JSX.Element => {
           }
 
           if (finalTranscript.trim()) {
-            // Add final transcript to current phase
-            setSpeechTranscripts((prev) => ({
-              ...prev,
-              [debatePhase]: (
-                (prev[debatePhase] || "") +
-                " " +
-                finalTranscript
-              ).trim(),
-            }));
-            setCurrentTranscript("");
+            if (debatePhase === DebatePhase.Setup) {
+              setSpeechTopicBuffer((prev) => (prev + " " + finalTranscript).trim());
+            } else {
+              // Add final transcript to current phase
+              setSpeechTranscripts((prev) => ({
+                ...prev,
+                [debatePhase]: (
+                  (prev[debatePhase] || "") +
+                  " " +
+                  finalTranscript
+                ).trim(),
+              }));
+              setCurrentTranscript("");
 
-            // Send transcript to backend
-            if (wsRef.current?.readyState === WebSocket.OPEN) {
-              wsRef.current.send(
-                JSON.stringify({
-                  type: "speechText",
-                  userId: currentUser?.id,
-                  username: currentUser?.displayName,
-                  speechText: finalTranscript,
-                  phase: debatePhase,
-                })
-              );
+              // Send transcript to backend
+              if (wsRef.current?.readyState === WebSocket.OPEN) {
+                wsRef.current.send(
+                  JSON.stringify({
+                    type: "speechText",
+                    userId: currentUser?.id,
+                    username: currentUser?.displayName,
+                    speechText: finalTranscript,
+                    phase: debatePhase,
+                  })
+                );
+              }
             }
           }
           if (interimTranscript) {
             setCurrentTranscript(interimTranscript);
 
-            // Send live transcript to opponent
-            if (wsRef.current?.readyState === WebSocket.OPEN) {
+            // In setup phase, show interim transcript for topic as well
+            if (debatePhase !== DebatePhase.Setup && wsRef.current?.readyState === WebSocket.OPEN) {
               wsRef.current.send(
                 JSON.stringify({
                   type: "liveTranscript",
@@ -1749,10 +1764,9 @@ const OnlineDebateRoom = (): JSX.Element => {
         recognition.onend = () => {
           setIsListening(false);
 
-          // Restart speech recognition if it's still the user's turn
+          // Restart speech recognition if it's still the user's turn or in Setup
           if (
-            isMyTurn &&
-            debatePhase !== DebatePhase.Setup &&
+            (isMyTurn || debatePhase === DebatePhase.Setup) &&
             debatePhase !== DebatePhase.Finished &&
             !isAutoMuted
           ) {
@@ -2090,9 +2104,47 @@ const OnlineDebateRoom = (): JSX.Element => {
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
     const newTopic = e.target.value;
-    setTopic(newTopic);
-    const message = JSON.stringify({ type: "topicChange", topic: newTopic });
+    setLocalTopic(newTopic);
+    isTypingTopicRef.current = true;
+
+    // Pause speech recognition while typing to avoid interference
+    if (recognitionRef.current && isListening) {
+      try {
+        recognitionRef.current.stop();
+      } catch (err) {
+        console.warn("Could not stop recognition during typing:", err);
+      }
+    }
+
+    // Clear existing timeout
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
+
+    // Set new debounce timeout
+    debounceTimeoutRef.current = setTimeout(() => {
+      isTypingTopicRef.current = false;
+      setTopic(newTopic);
+      const message = JSON.stringify({ type: "topicChange", topic: newTopic });
+      wsRef.current?.send(message);
+    }, 500);
+  };
+
+  const applyVoiceToTopic = () => {
+    if (!speechTopicBuffer.trim()) return;
+    
+    // Append speech to local topic
+    const updatedTopic = (localTopic + " " + speechTopicBuffer).trim();
+    setLocalTopic(updatedTopic);
+    setTopic(updatedTopic);
+    setSpeechTopicBuffer(""); // Clear buffer
+    setCurrentTranscript(""); // Clear interim
+
+    // Sync to other user
+    const message = JSON.stringify({ type: "topicChange", topic: updatedTopic });
     wsRef.current?.send(message);
+    
+    console.debug("Applied voice input to topic:", updatedTopic);
   };
 
   const handleRoleSelection = (role: DebateRole) => {
@@ -2264,7 +2316,7 @@ const OnlineDebateRoom = (): JSX.Element => {
                     <input
                       type="text"
                       list="topics-list"
-                      value={topic}
+                      value={localTopic}
                       onChange={handleTopicChange}
                       placeholder="Select a topic or enter custom..."
                       className="border border-border rounded-lg p-3 w-full bg-input text-foreground focus:ring-2 focus:ring-orange-400 focus:border-transparent transition-all outline-none"
@@ -2278,6 +2330,36 @@ const OnlineDebateRoom = (): JSX.Element => {
                   <p className="mt-1 text-xs text-muted-foreground italic">
                     Both debaters can see topic changes in real-time.
                   </p>
+
+                  {/* Voice Input Buffer Section */}
+                  <div className="mt-4 p-3 bg-muted/30 rounded-lg border border-dashed border-border">
+                    <div className="flex justify-between items-center mb-2">
+                       <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                         <div className={`w-2 h-2 rounded-full ${isListening ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}`} />
+                         {isListening ? "Mic is listening..." : "Mic is paused"}
+                       </div>
+                       {speechTopicBuffer && (
+                         <Button 
+                           size="sm" 
+                           onClick={applyVoiceToTopic}
+                           className="h-7 px-2 text-[10px] bg-primary/20 text-primary hover:bg-primary/30 border-transparent"
+                         >
+                           <Check className="w-3 h-3 mr-1" /> Apply Voice
+                         </Button>
+                       )}
+                    </div>
+                    
+                    {speechTopicBuffer ? (
+                      <p className="text-sm text-foreground/80 bg-background/50 p-2 rounded border border-border/50">
+                        <Sparkles className="w-3 h-3 inline mr-1 text-orange-400" />
+                        {speechTopicBuffer}
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground italic text-center py-1">
+                        Speak to buffer voice input for your topic...
+                      </p>
+                    )}
+                  </div>
                 </div>
                 {/* Avatars and Role Selection */}
                 <div className="mb-6 flex justify-around">
