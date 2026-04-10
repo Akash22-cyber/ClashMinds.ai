@@ -2650,7 +2650,7 @@ const OnlineDebateRoom = (): JSX.Element => {
                 autoPlay
                 muted
                 playsInline
-                className={`w-full h-80 object-cover rounded-lg ${
+                className={`scale-x-[-1] w-full h-80 object-cover rounded-lg ${
                   isCameraOff || (debatePhase === DebatePhase.Setup && (!localReady || !peerReady)) ? "opacity-0" : "opacity-100"
                 } transition-opacity duration-300`}
               />
