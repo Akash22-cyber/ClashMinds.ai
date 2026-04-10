@@ -86,6 +86,8 @@ interface UserDetails {
   avatarUrl?: string;
   displayName?: string;
   email?: string;
+  role?: string;
+  isReady?: boolean;
 }
 
 // Define WebSocket message structure
