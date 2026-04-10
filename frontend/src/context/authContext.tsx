@@ -40,7 +40,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [token, setToken] = useState<string | null>(
     localStorage.getItem('token')
   );
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(!!localStorage.getItem('token'));
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const setUser = useSetAtom(userAtom);
@@ -54,7 +54,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const verifyToken = useCallback(async () => {
     const storedToken = localStorage.getItem('token');
-    if (!storedToken) return;
+    if (!storedToken) {
+      setLoading(false);
+      return;
+    }
+    
+    setLoading(true);
     try {
       const response = await fetch(`${baseURL}/verifyToken`, {
         method: 'POST',
@@ -62,11 +67,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
 
       if (!response.ok) {
-        // Token is expired or invalid - clear it and redirect to login
+        // Token is expired or invalid - clear everything and redirect to auth
         localStorage.removeItem('token');
+        localStorage.removeItem(USER_CACHE_KEY);
         setToken(null);
         setUser(null);
-        navigate('/login');
+        navigate('/auth');
         return;
       }
       setToken(storedToken);
@@ -108,6 +114,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) {
       console.log('error', error);
       logout();
+    } finally {
+      setLoading(false);
     }
   }, [setUser]);
 

@@ -49,7 +49,12 @@ function AppRoutes() {
   if (!authContext) {
     throw new Error('AppRoutes must be used within an AuthProvider');
   }
-  const { isAuthenticated } = authContext;
+  const { isAuthenticated, loading: isLoading } = authContext;
+
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
+
   return (
     <Routes>
       {/* Public routes */}

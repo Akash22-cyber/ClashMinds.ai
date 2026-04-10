@@ -13,11 +13,13 @@ export const useUser = () => {
   const [user, setUser] = useAtom(userAtom);
   const authContext = useContext(AuthContext);
 
-  // Hydrate from localStorage if available
+  // Hydrate from localStorage if available - strictly check for token first
   useEffect(() => {
     if (!user) {
+      const token = localStorage.getItem("token");
       const cachedUser = localStorage.getItem(USER_CACHE_KEY);
-      if (cachedUser) {
+
+      if (token && cachedUser) {
         try {
           const parsedUser = JSON.parse(cachedUser);
           setUser(parsedUser);
@@ -25,6 +27,9 @@ export const useUser = () => {
           console.error("Failed to parse cached user profile:", error);
           localStorage.removeItem(USER_CACHE_KEY);
         }
+      } else if (!token && cachedUser) {
+        // Prevent "default user" glitch: if no token exists, clear stale profile data
+        localStorage.removeItem(USER_CACHE_KEY);
       }
     }
   }, [user, setUser]);
