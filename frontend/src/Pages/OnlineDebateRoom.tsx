@@ -214,6 +214,9 @@ const OnlineDebateRoom = (): JSX.Element => {
 
   // State for debate setup and signaling
   const [topic, setTopic] = useState("");
+  const [localTopic, setLocalTopic] = useState("");
+  const isTypingTopicRef = useRef(false);
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [localRole, setLocalRole] = useState<DebateRole | null>(null);
   const [peerRole, setPeerRole] = useState<DebateRole | null>(null);
   const [localReady, setLocalReady] = useState(false);
@@ -1210,7 +1213,12 @@ const OnlineDebateRoom = (): JSX.Element => {
       const data: WSMessage = JSON.parse(event.data);
       switch (data.type) {
         case "topicChange":
-          if (data.topic !== undefined) setTopic(data.topic);
+          if (data.topic !== undefined) {
+            setTopic(data.topic);
+            if (!isTypingTopicRef.current) {
+              setLocalTopic(data.topic);
+            }
+          }
           break;
         case "roleSelection":
           if (data.role) setPeerRole(data.role);
@@ -2090,9 +2098,21 @@ const OnlineDebateRoom = (): JSX.Element => {
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
     const newTopic = e.target.value;
-    setTopic(newTopic);
-    const message = JSON.stringify({ type: "topicChange", topic: newTopic });
-    wsRef.current?.send(message);
+    setLocalTopic(newTopic);
+    isTypingTopicRef.current = true;
+
+    // Clear existing timeout
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
+
+    // Set new debounce timeout
+    debounceTimeoutRef.current = setTimeout(() => {
+      isTypingTopicRef.current = false;
+      setTopic(newTopic);
+      const message = JSON.stringify({ type: "topicChange", topic: newTopic });
+      wsRef.current?.send(message);
+    }, 500);
   };
 
   const handleRoleSelection = (role: DebateRole) => {
@@ -2264,7 +2284,7 @@ const OnlineDebateRoom = (): JSX.Element => {
                     <input
                       type="text"
                       list="topics-list"
-                      value={topic}
+                      value={localTopic}
                       onChange={handleTopicChange}
                       placeholder="Select a topic or enter custom..."
                       className="border border-border rounded-lg p-3 w-full bg-input text-foreground focus:ring-2 focus:ring-orange-400 focus:border-transparent transition-all outline-none"
