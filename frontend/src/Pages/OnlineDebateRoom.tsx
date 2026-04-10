@@ -1216,7 +1216,7 @@ const OnlineDebateRoom = (): JSX.Element => {
       const data: WSMessage = JSON.parse(event.data);
       switch (data.type) {
         case "topicChange":
-          if (data.topic !== undefined && data.userId !== currentUser?.id) {
+          if (data.topic !== undefined) {
             setTopic(data.topic);
             if (!isTypingTopicRef.current) {
               setLocalTopic(data.topic);
@@ -1224,10 +1224,10 @@ const OnlineDebateRoom = (): JSX.Element => {
           }
           break;
         case "roleSelection":
-          if (data.role && data.userId !== currentUser?.id) setPeerRole(data.role);
+          if (data.role) setPeerRole(data.role);
           break;
         case "ready":
-          if (data.ready !== undefined && data.userId !== currentUser?.id) setPeerReady(data.ready);
+          if (data.ready !== undefined) setPeerReady(data.ready);
           break;
         case "phaseChange":
           if (data.phase) {
