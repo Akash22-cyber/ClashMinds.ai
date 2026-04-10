@@ -156,6 +156,7 @@ type DebateState = {
   botStance: string;
   timer: number;
   isDebateEnded: boolean;
+  isBotThinking: boolean;
 };
 
 type JudgmentData = {
@@ -237,6 +238,7 @@ const DebateRoom: React.FC = () => {
           botStance: "",
           timer: phases[0].time,
           isDebateEnded: false,
+          isBotThinking: false,
         };
   });
   const [finalInput, setFinalInput] = useState("");
@@ -249,9 +251,6 @@ const DebateRoom: React.FC = () => {
   const [judgmentData, setJudgmentData] = useState<JudgmentData | null>(null);
   const [showJudgment, setShowJudgment] = useState(false);
   const [isRecognizing, setIsRecognizing] = useState(false);
-  const [nextTurnPending, setNextTurnPending] = useState(false);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const botTurnRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
 
@@ -374,47 +373,105 @@ const DebateRoom: React.FC = () => {
     }
   }, [state.userStance, debateData.stance]);
 
-  useEffect(() => {
-    if (state.timer > 0 && !state.isDebateEnded) {
-      timerRef.current = setInterval(() => {
-        setState((prev) => {
-          if (prev.timer <= 1) {
-            clearInterval(timerRef.current!);
-            if (!prev.isBotTurn) {
-              if (isRecognizing) stopRecognition();
-              setPopup({
-                show: true,
-                message: "Time's up! Moving to the next turn.",
-              });
-              setTimeout(() => setPopup({ show: false, message: "" }), 2000);
-              const updatedState = { ...prev, timer: 0 };
-              advanceTurn(updatedState);
-              return updatedState;
-            } else {
-              setNextTurnPending(true);
-              return { ...prev, timer: 0 };
-            }
-          }
-          return { ...prev, timer: prev.timer - 1 };
-        });
-      }, 1000);
-    }
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [state.timer, state.isDebateEnded, state.isBotTurn, isRecognizing]);
+  // -------------------------------------------------------------------------
+  // CORE ENGINE: Centralized Turn Transition
+  // -------------------------------------------------------------------------
+  const processTurnTransition = (prevState: DebateState) => {
+    const { currentPhase, phaseStep } = prevState;
+    const currentSequence = phaseSequences[currentPhase];
 
+    // Check if there's another step in the current phase
+    if (phaseStep + 1 < currentSequence.length) {
+      const nextStep = phaseStep + 1;
+      const nextStance = currentSequence[nextStep];
+      const nextIsBot = prevState.botStance === nextStance;
+
+      return {
+        ...prevState,
+        phaseStep: nextStep,
+        isBotTurn: nextIsBot,
+        timer: phases[currentPhase].time,
+        isBotThinking: false,
+      };
+    } 
+    
+    // Check if there's another phase
+    if (currentPhase + 1 < phases.length) {
+      const nextPhase = currentPhase + 1;
+      const nextSequence = phaseSequences[nextPhase];
+      const nextStance = nextSequence[0];
+      const nextIsBot = prevState.botStance === nextStance;
+
+      // Handle phase transition notification
+      setPopup({
+        show: true,
+        message: `${phases[currentPhase].name} completed. Next: ${
+          phases[nextPhase].name
+        } - ${getPhaseInstructions(nextPhase)}`,
+      });
+      setTimeout(() => setPopup({ show: false, message: "" }), 4000);
+
+      return {
+        ...prevState,
+        currentPhase: nextPhase,
+        phaseStep: 0,
+        isBotTurn: nextIsBot,
+        timer: phases[nextPhase].time,
+        isBotThinking: false,
+      };
+    }
+
+    // No more turns: End Debate
+    setPopup({
+      show: true,
+      message: "Calculating scores and judging results...",
+      isJudging: true,
+    });
+    
+    judgeDebateResult(prevState.messages);
+
+    return {
+      ...prevState,
+      isDebateEnded: true,
+      timer: 0,
+      isBotThinking: false,
+    };
+  };
+
+  // Stable Timer logic
   useEffect(() => {
-    if (state.isBotTurn && !state.isDebateEnded && !botTurnRef.current) {
-      botTurnRef.current = true;
+    if (state.isDebateEnded) return;
+
+    const tick = setInterval(() => {
+      setState((prev) => {
+        if (prev.isDebateEnded || prev.isBotThinking) return prev;
+
+        if (prev.timer <= 0) {
+          // Time's up transition
+          if (!prev.isBotTurn) {
+            if (isRecognizing) stopRecognition();
+            setPopup({
+              show: true,
+              message: "Time's up! Moving to the next turn.",
+            });
+            setTimeout(() => setPopup({ show: false, message: "" }), 2000);
+          }
+          return processTurnTransition(prev);
+        }
+
+        return { ...prev, timer: prev.timer - 1 };
+      });
+    }, 1000);
+
+    return () => clearInterval(tick);
+  }, [state.isDebateEnded, isRecognizing]);
+
+  // Bot Turn Trigger
+  useEffect(() => {
+    if (state.isBotTurn && !state.isDebateEnded && !state.isBotThinking) {
       handleBotTurn();
     }
-  }, [
-    state.isBotTurn,
-    state.currentPhase,
-    state.phaseStep,
-    state.isDebateEnded,
-  ]);
+  }, [state.isBotTurn, state.currentPhase, state.phaseStep, state.isDebateEnded]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -433,58 +490,6 @@ const DebateRoom: React.FC = () => {
     }
   };
 
-  const advanceTurn = (currentState: DebateState) => {
-    const currentSequence = phaseSequences[currentState.currentPhase];
-    if (currentState.phaseStep + 1 < currentSequence.length) {
-      const nextStep = currentState.phaseStep + 1;
-      const nextStance = currentSequence[nextStep];
-      const nextEntity =
-        currentState.userStance === nextStance ? "User" : "Bot";
-      setState({
-        ...currentState,
-        phaseStep: nextStep,
-        isBotTurn: nextEntity === "Bot",
-        timer: phases[currentState.currentPhase].time,
-      });
-      setNextTurnPending(false);
-    } else if (currentState.currentPhase < phases.length - 1) {
-      const newPhase = currentState.currentPhase + 1;
-      setPopup({
-        show: true,
-        message: `${phases[currentState.currentPhase].name} completed. Next: ${
-          phases[newPhase].name
-        } - ${getPhaseInstructions(newPhase)}`,
-      });
-      setTimeout(() => {
-        setPopup({ show: false, message: "" });
-        setState((prevState) => ({
-          ...prevState,
-          currentPhase: newPhase,
-          phaseStep: 0,
-          isBotTurn:
-            prevState.userStance === phaseSequences[newPhase][0] ? false : true,
-          timer: phases[newPhase].time,
-        }));
-        setNextTurnPending(false);
-      }, 4000);
-    } else {
-      setPopup({
-        show: true,
-        message: "Calculating scores and judging results...",
-        isJudging: true,
-      });
-      setState({ ...currentState, isDebateEnded: true });
-      judgeDebateResult(currentState.messages);
-      setNextTurnPending(false);
-    }
-  };
-
-  const handleNextTurn = () => {
-    setState((prev) => {
-      advanceTurn(prev);
-      return prev;
-    });
-  };
 
   const sendMessage = async () => {
     if (!finalInput.trim() || state.isBotTurn || state.timer === 0) return;
@@ -499,11 +504,8 @@ const DebateRoom: React.FC = () => {
       const updatedState = {
         ...prev,
         messages: [...prev.messages, newMessage],
-        timer: phases[prev.currentPhase].time,
       };
-      clearInterval(timerRef.current!);
-      advanceTurn(updatedState);
-      return updatedState;
+      return processTurnTransition(updatedState);
     });
 
     setFinalInput("");
@@ -512,7 +514,12 @@ const DebateRoom: React.FC = () => {
   };
 
   const handleBotTurn = async () => {
+    setState(prev => ({ ...prev, isBotThinking: true }));
+
     try {
+      // Small artificial delay for realism
+      await new Promise(r => setTimeout(r, 1000));
+
       const turnType = turnTypes[state.currentPhase][state.phaseStep];
       let context = "";
       if (turnType === "statement") {
@@ -546,15 +553,10 @@ const DebateRoom: React.FC = () => {
           ...prev,
           messages: [...prev.messages, botMessage],
         };
-        // Advance turn after bot responds
-        setTimeout(() => {
-          advanceTurn(updatedState);
-        }, 100); // Small delay to ensure state is updated
-        return updatedState;
+        return processTurnTransition(updatedState);
       });
     } catch (error) {
       console.error("Bot error:", error);
-      // Even on error, advance turn to prevent getting stuck
       setState((prev) => {
         const errorMessage: Message = {
           sender: "Bot",
@@ -564,13 +566,9 @@ const DebateRoom: React.FC = () => {
         const updatedState = {
           ...prev,
           messages: [...prev.messages, errorMessage],
-          isBotTurn: false, // Reset bot turn on error
         };
-        advanceTurn(updatedState);
-        return updatedState;
+        return processTurnTransition(updatedState);
       });
-    } finally {
-      botTurnRef.current = false;
     }
   };
 
@@ -775,15 +773,7 @@ const DebateRoom: React.FC = () => {
                 {bot.rating ? `Rating: ${bot.rating}` : "Ready to argue!"}
               </div>
             </div>
-            {nextTurnPending && (
-              <Button
-                onClick={handleNextTurn}
-                className="ml-auto bg-green-500 hover:bg-green-600 text-white rounded-md px-3 text-sm"
-              >
-                Next Turn
-              </Button>
-            )}
-          </div>
+            </div>
           <div className="p-3 flex-1 overflow-y-auto">
             <p className="text-sm font-semibold text-orange-600 mb-1">
               Stance: {state.botStance}
@@ -862,7 +852,7 @@ const DebateRoom: React.FC = () => {
                   }
                   readOnly={isRecognizing}
                   disabled={
-                    state.isBotTurn || state.timer === 0 || nextTurnPending
+                    state.isBotTurn || state.timer === 0
                   }
                   placeholder={
                     currentTurnType === "statement"
@@ -876,7 +866,7 @@ const DebateRoom: React.FC = () => {
                 <Button
                   onClick={isRecognizing ? stopRecognition : startRecognition}
                   disabled={
-                    state.isBotTurn || state.timer === 0 || nextTurnPending
+                    state.isBotTurn || state.timer === 0
                   }
                   className="bg-blue-500 hover:bg-blue-600 text-white rounded-md p-2"
                 >
@@ -889,7 +879,7 @@ const DebateRoom: React.FC = () => {
                 <Button
                   onClick={sendMessage}
                   disabled={
-                    state.isBotTurn || state.timer === 0 || nextTurnPending
+                    state.isBotTurn || state.timer === 0
                   }
                   className="bg-orange-500 hover:bg-orange-600 text-white rounded-md px-3 text-sm"
                 >
