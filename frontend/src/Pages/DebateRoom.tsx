@@ -760,7 +760,10 @@ const DebateRoom: React.FC = () => {
           userStance={state.userStance}
           botStance={state.botStance}
           botDesc={bot.desc}
-          onClose={() => setShowJudgment(false)}
+          onClose={() => {
+            setShowJudgment(false);
+            navigate("/profile");
+          }}
         />
       )}
 

@@ -875,7 +875,7 @@ const OnlineDebateRoom = (): JSX.Element => {
   const handleEndDebate = useCallback(() => {
     if (
       window.confirm(
-        "Are you sure you want to end this debate? You will be redirected to your dashboard to see the analysis."
+        "Are you sure you want to end this debate? You will wait for the AI Judge evaluation."
       )
     ) {
       if (wsRef.current) {
@@ -889,10 +889,6 @@ const OnlineDebateRoom = (): JSX.Element => {
         );
       }
       setDebatePhase(DebatePhase.Finished);
-      // Wait a moment for transcripts to submit before navigating
-      setTimeout(() => {
-        navigate("/profile");
-      }, 2000);
     }
   }, [roomId, currentUserId, currentUser, setDebatePhase, navigate]);
 
@@ -946,8 +942,11 @@ const OnlineDebateRoom = (): JSX.Element => {
                 `Timer expired for ${localRole} in ${debatePhase}. Transcript saved:`,
                 existingTranscript
               );
+              
+              // Only the person whose turn it is should advance the phase
+              // to prevent dual-timer race conditions over the network.
+              handlePhaseDone();
             }
-            handlePhaseDone();
             return 0;
           }
           return prev - 1;
@@ -1186,7 +1185,7 @@ const OnlineDebateRoom = (): JSX.Element => {
   );
 
   // Initialize WebSocket, RTCPeerConnection, and media
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   useEffect(() => {
     const token = getAuthToken();
     if (!token || !roomId) return;
@@ -1563,7 +1562,7 @@ const OnlineDebateRoom = (): JSX.Element => {
   }, [localStream, remoteStream]);
 
   // Initialize Audio Recording
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   useEffect(() => {
     const initializeAudio = async () => {
       try {
@@ -1674,7 +1673,7 @@ const OnlineDebateRoom = (): JSX.Element => {
   }, []);
 
   // Initialize Speech Recognition
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   useEffect(() => {
     const initializeSpeechRecognition = () => {
       if (
@@ -2599,7 +2598,10 @@ const OnlineDebateRoom = (): JSX.Element => {
           }
           opponentAvatarUrl={opponentUser?.avatarUrl || null}
           ratingSummary={ratingSummary}
-          onClose={() => setShowJudgment(false)}
+          onClose={() => {
+            setShowJudgment(false);
+            navigate("/profile");
+          }}
         />
       )}
 
