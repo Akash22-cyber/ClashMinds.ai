@@ -253,6 +253,7 @@ const DebateRoom: React.FC = () => {
   const [isRecognizing, setIsRecognizing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const autoStartFailedRef = useRef(false);
 
   const bot = allBots.find((b) => b.name === debateData.botName) || allBots[0];
   const userAvatar =
@@ -321,6 +322,10 @@ const DebateRoom: React.FC = () => {
           const errorEvent = event as Event & { error?: string };
           console.error("Speech recognition error:", errorEvent.error ?? event);
           setIsRecognizing(false);
+          // Set an error state or ref to prevent immediate retry
+          if (errorEvent.error === "not-allowed" || errorEvent.error === "aborted") {
+             autoStartFailedRef.current = true;
+          }
         };
       }
     }
@@ -333,6 +338,7 @@ const DebateRoom: React.FC = () => {
   // Start/Stop Speech Recognition
   const startRecognition = () => {
     if (recognitionRef.current && !isRecognizing) {
+      autoStartFailedRef.current = false;
       recognitionRef.current.start();
       setIsRecognizing(true);
     }
@@ -344,6 +350,15 @@ const DebateRoom: React.FC = () => {
       setIsRecognizing(false);
     }
   };
+
+  useEffect(() => {
+    const isUserTurn = !state.isBotTurn && !state.isDebateEnded && state.timer > 0;
+    if (isUserTurn && !isRecognizing && !autoStartFailedRef.current) {
+      startRecognition();
+    } else if (!isUserTurn && isRecognizing) {
+      stopRecognition();
+    }
+  }, [state.isBotTurn, state.currentPhase, state.timer, isRecognizing]);
 
   useEffect(() => {
     localStorage.setItem(debateKey, JSON.stringify(state));
