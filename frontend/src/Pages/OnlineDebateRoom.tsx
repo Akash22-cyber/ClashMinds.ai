@@ -2018,20 +2018,18 @@ const OnlineDebateRoom = (): JSX.Element => {
   }, [isManualRecording, stopAudioRecording, stopSpeechRecognition]);
 
   useEffect(() => {
-    if (!manualRecordingRef.current) {
-      return;
-    }
-
-    const canStillSpeak =
+    const canSpeakNow =
       isMyTurn &&
       debatePhase !== DebatePhase.Setup &&
       debatePhase !== DebatePhase.Finished &&
       !isAutoMuted;
 
-    if (!canStillSpeak) {
+    if (canSpeakNow && !manualRecordingRef.current) {
+      handleStartSpeaking();
+    } else if (!canSpeakNow && manualRecordingRef.current) {
       handleStopSpeaking();
     }
-  }, [isMyTurn, debatePhase, isAutoMuted, handleStopSpeaking]);
+  }, [isMyTurn, debatePhase, isAutoMuted, handleStartSpeaking, handleStopSpeaking]);
 
   // Auto start/stop recording and speech recognition based on turn
   useEffect(() => {
