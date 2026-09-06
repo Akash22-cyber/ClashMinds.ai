@@ -194,7 +194,7 @@ const player2RatingSummary =
   !isUserBotFormat && ratingSummary ? ratingSummary.against : null;
 
   const handleGoHome = () => {
-    navigate('/startdebate');
+    navigate('/');
   };
 
   // Helper function to safely access scores and reasons

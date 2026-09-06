@@ -644,8 +644,9 @@ const TeamDebateRoom: React.FC = () => {
                 `${debateId}_${debatePhase}_${localRole}`,
                 existingTranscript
               );
+              // Only advance if it's my turn
+              handlePhaseDone();
             }
-            handlePhaseDone();
             return 0;
           }
           return prev - 1;
@@ -1936,7 +1937,10 @@ const TeamDebateRoom: React.FC = () => {
           judgment={judgmentData}
           forRole={localRole === "for" ? "Your Team" : "Opponent Team"}
           againstRole={localRole === "against" ? "Your Team" : "Opponent Team"}
-          onClose={() => setShowJudgment(false)}
+          onClose={() => {
+            setShowJudgment(false);
+            navigate("/profile");
+          }}
         />
       )}
 
