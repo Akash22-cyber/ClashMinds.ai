@@ -4,10 +4,10 @@ import (
 	"context"
 	"time"
 
-	"clashminds/config"
-	"clashminds/db"
-	"clashminds/models"
-	"clashminds/services"
+	"arguehub/config"
+	"arguehub/db"
+	"arguehub/models"
+	"arguehub/services"
 
 	"go.mongodb.org/mongo-driver/bson"
 )

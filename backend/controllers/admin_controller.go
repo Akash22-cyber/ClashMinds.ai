@@ -1,9 +1,9 @@
 package controllers
 
 import (
-	"clashminds/db"
-	"clashminds/middlewares"
-	"clashminds/models"
+	"arguehub/db"
+	"arguehub/middlewares"
+	"arguehub/models"
 	"context"
 	"fmt"
 	"math"

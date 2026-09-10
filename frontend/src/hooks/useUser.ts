@@ -2,9 +2,9 @@ import { useEffect, useContext } from "react";
 import { useAtom } from "jotai";
 import { userAtom } from "../state/userAtom";
 import { AuthContext } from "../context/authContext";
+import { DEFAULT_AVATAR_URL } from "@/constants/avatar";
 
 const USER_CACHE_KEY = "userProfile";
-const DEFAULT_AVATAR = "https://avatar.iran.liara.run/public/10";
 const DEFAULT_RATING = 1500;
 const DEFAULT_RD = 350;
 const DEFAULT_VOLATILITY = 0.06;
@@ -13,13 +13,11 @@ export const useUser = () => {
   const [user, setUser] = useAtom(userAtom);
   const authContext = useContext(AuthContext);
 
-  // Hydrate from localStorage if available - strictly check for token first
+  // Hydrate from localStorage if available
   useEffect(() => {
     if (!user) {
-      const token = localStorage.getItem("token");
       const cachedUser = localStorage.getItem(USER_CACHE_KEY);
-
-      if (token && cachedUser) {
+      if (cachedUser) {
         try {
           const parsedUser = JSON.parse(cachedUser);
           setUser(parsedUser);
@@ -27,9 +25,6 @@ export const useUser = () => {
           console.error("Failed to parse cached user profile:", error);
           localStorage.removeItem(USER_CACHE_KEY);
         }
-      } else if (!token && cachedUser) {
-        // Prevent "default user" glitch: if no token exists, clear stale profile data
-        localStorage.removeItem(USER_CACHE_KEY);
       }
     }
   }, [user, setUser]);
@@ -78,7 +73,7 @@ export const useUser = () => {
           avatarUrl:
             profile.avatarUrl ||
             userData.avatarUrl ||
-            DEFAULT_AVATAR,
+            DEFAULT_AVATAR_URL,
           twitter: profile.twitter || userData.twitter,
           instagram: profile.instagram || userData.instagram,
           linkedin: profile.linkedin || userData.linkedin,

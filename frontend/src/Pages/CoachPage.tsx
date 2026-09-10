@@ -131,9 +131,11 @@ const CoachPage: React.FC = () => {
             </Button>
           </div>
           <p className="text-sm text-muted-foreground mt-4 italic font-medium">
-            Managed with ❤️ by CLASHMIND.ai Team
+            Managed with ❤️ by <a href="https://aossie.org" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">Akash22-cyber</a>
           </p>
-
+          <p className="text-xs text-muted-foreground mt-1">
+            © {new Date().getFullYear()} CLASHMIND.ai. All rights reserved.
+          </p>
         </div>
       </footer>
     </div>

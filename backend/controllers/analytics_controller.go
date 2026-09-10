@@ -1,8 +1,8 @@
 package controllers
 
 import (
-	"clashminds/db"
-	"clashminds/models"
+	"arguehub/db"
+	"arguehub/models"
 	"context"
 	"log"
 	"net/http"

@@ -9,7 +9,7 @@ package websocket
 // 	"time"
 // 	"os"
 // 	"bytes"
-// 	"clashminds/structs"
+// 	"arguehub/structs"
 
 // 	"github.com/gin-gonic/gin"
 // 	"github.com/gorilla/websocket"

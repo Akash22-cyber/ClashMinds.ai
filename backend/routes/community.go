@@ -1,7 +1,7 @@
 package routes
 
 import (
-	"clashminds/controllers"
+	"arguehub/controllers"
 
 	"github.com/gin-gonic/gin"
 )

@@ -7,6 +7,7 @@ import DebateCover from "../assets/DebateCover4.svg";
 import { Button } from "../components/ui/button";
 import { AuthContext } from "../context/authContext";
 import DebatePopup from "@/components/DebatePopup";
+import ClashMindsLogo from "@/assets/aossie.png";
 
 const StartDebate = () => {
   const navigate = useNavigate();

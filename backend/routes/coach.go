@@ -1,7 +1,7 @@
 package routes
 
 import (
-	"clashminds/services"
+	"arguehub/services"
 	"net/http"
 
 	"github.com/gin-gonic/gin"

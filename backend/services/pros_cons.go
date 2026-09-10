@@ -8,7 +8,7 @@ import (
 	"log"
 	"strings"
 
-	"clashminds/models"
+	"arguehub/models"
 )
 
 // GenerateDebateTopic generates a debate topic using the Gemini API based on the user's skill level

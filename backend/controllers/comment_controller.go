@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"clashminds/db"
-	"clashminds/models"
-	"clashminds/services"
-	"clashminds/utils"
+	"arguehub/db"
+	"arguehub/models"
+	"arguehub/services"
+	"arguehub/utils"
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"

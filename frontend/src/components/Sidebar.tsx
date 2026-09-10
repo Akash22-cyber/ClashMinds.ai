@@ -9,14 +9,16 @@ import {
   Trophy,
   Users,
   MessageCircle,
+  Heart,
 } from 'lucide-react';
+import debateAiLogo from '@/assets/aossie.png';
 import { ThemeToggle } from './ThemeToggle';
 
 function Sidebar() {
   return (
-    <aside className='hidden md:flex flex-col w-64 border-r border-gray-200'>
+    <aside className='hidden md:flex flex-col w-64 border-r border-border bg-background'>
       {/* Logo / Brand */}
-      <div className='flex items-center h-16 px-4 border-b border-gray-200'>
+      <div className='flex items-center h-16 px-4 border-b border-border'>
         <div className='flex items-center gap-2'>
           <span className='text-xl font-bold'>CLASHMIND.ai</span>
         </div>
@@ -57,6 +59,11 @@ function Sidebar() {
           to='/about'
           label='About'
           icon={<Info className='mr-3 h-4 w-4' />}
+        />
+        <NavItem
+          to='/support-os'
+          label='Support CLASHMIND.ai'
+          icon={<Heart className='mr-3 h-4 w-4 text-red-500 transition-all duration-300 group-hover:fill-red-500 group-hover:scale-110' />}
         />
         <ThemeToggle />
       </nav>

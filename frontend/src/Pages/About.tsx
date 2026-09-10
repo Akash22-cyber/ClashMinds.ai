@@ -109,8 +109,6 @@ function About() {
         Thank you for being a part of CLASHMIND.ai. Together, let’s make
         argumentation and critical thinking skills accessible to everyone!
       </p>
-
-
     </div>
   );
 }

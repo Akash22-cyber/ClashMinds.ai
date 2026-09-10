@@ -1,8 +1,8 @@
 package services
 
 import (
-	"clashminds/db"
-	"clashminds/models"
+	"arguehub/db"
+	"arguehub/models"
 	"context"
 	"encoding/json"
 	"errors"

@@ -1,8 +1,8 @@
 package utils
 
 import (
-	"clashminds/db"
-	"clashminds/models"
+	"arguehub/db"
+	"arguehub/models"
 	"context"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"

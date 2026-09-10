@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"time"
 
-	"clashminds/db"
-	"clashminds/models"
-	"clashminds/services"
+	"arguehub/db"
+	"arguehub/models"
+	"arguehub/services"
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"

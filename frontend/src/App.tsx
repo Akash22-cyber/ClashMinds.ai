@@ -15,9 +15,10 @@ import DebateRoom from './Pages/DebateRoom';
 import OnlineDebateRoom from './Pages/OnlineDebateRoom';
 import StrengthenArgument from './Pages/StrengthenArgument';
 import SpeechTest from './Pages/SpeechTest';
+import PrivacyPolicy from './Pages/PrivacyPolicy';
+import TermsOfService from './Pages/TermsOfService';
 // Layout
 import Layout from './components/Layout';
-
 import CoachPage from './Pages/CoachPage';
 import ChatRoom from './components/ChatRoom';
 import TournamentHub from './Pages/TournamentHub';
@@ -29,6 +30,7 @@ import CommunityFeed from './Pages/CommunityFeed';
 import AdminSignup from './Pages/Admin/AdminSignup';
 import AdminDashboard from './Pages/Admin/AdminDashboard';
 import ViewDebate from './Pages/ViewDebate';
+import SupportOpenSource from './Pages/SupportOpenSource';
 
 // Protects routes based on authentication status
 function ProtectedRoute() {
@@ -49,12 +51,7 @@ function AppRoutes() {
   if (!authContext) {
     throw new Error('AppRoutes must be used within an AuthProvider');
   }
-  const { isAuthenticated, loading: isLoading } = authContext;
-
-  if (isLoading) {
-    return <div>Loading...</div>;
-  }
-
+  const { isAuthenticated } = authContext;
   return (
     <Routes>
       {/* Public routes */}
@@ -64,13 +61,16 @@ function AppRoutes() {
           isAuthenticated ? <Navigate to='/startDebate' replace /> : <Home />
         }
       />
-      <Route path='/auth' element={<Authentication />} />
+      <Route path='/auth'
+        element={ isAuthenticated ? <Navigate to='/startDebate' replace/> : <Authentication/> }
+      />
       <Route path='/admin/login' element={<AdminSignup />} />
       <Route path='/admin/dashboard' element={<AdminDashboard />} />
       {/* Public routes with layout */}
       <Route element={<Layout />}>
         <Route path='about' element={<About />} />
-
+        <Route path='privacy-policy' element={<PrivacyPolicy />} />
+        <Route path='terms-of-service' element={<TermsOfService />} />
       </Route>
 
       {/* Protected routes with layout */}
@@ -93,13 +93,8 @@ function AppRoutes() {
             path='coach/strengthen-argument'
             element={<StrengthenArgument />}
           />
-          <Route path='/coach' element={<CoachPage />} />
-          <Route
-            path='coach/strengthen-argument'
-            element={<StrengthenArgument />}
-          />{' '}
-          {/* Add this route */}
           <Route path='coach/pros-cons' element={<ProsConsChallenge />} />
+          <Route path='support-os' element={<SupportOpenSource />} />
         </Route>
         <Route path='/debate/:roomId' element={<DebateRoom />} />
         <Route path='/debate-room/:roomId' element={<OnlineDebateRoom />} />

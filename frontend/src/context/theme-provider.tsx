@@ -11,7 +11,7 @@ interface ThemeContextStructure {
     theme: ThemeOptions, toggleTheme: () => void
 }
 
-const defaultThemeContext: ThemeContextStructure = {
+var defaultThemeContext: ThemeContextStructure = {
     theme: ThemeOptions.Light,
     toggleTheme: () => { }
 }
@@ -27,15 +27,15 @@ function getInitialTheme() {
     //get theme to browser default
     let newTheme: ThemeOptions;
 
-    const systemThemeCodeStr = localStorage.getItem("Theme");
+    let systemThemeCodeStr = localStorage.getItem("Theme");
     if (systemThemeCodeStr == null) {
-        const defaultBrowserTheme = window.matchMedia("(prefers-color-scheme: light)").matches ? ThemeOptions.Light : ThemeOptions.Dark;
+        let defaultBrowserTheme = window.matchMedia("(prefers-color-scheme: light)").matches ? ThemeOptions.Light : ThemeOptions.Dark;
         newTheme = defaultBrowserTheme;
     }
     else {
         //learned importance of validation
         //validation is for the code which other people will write on top of mine
-        const systemThemeCode = +systemThemeCodeStr;
+        let systemThemeCode = +systemThemeCodeStr;
         if (validateThemeCode(systemThemeCode)) {
             //learned value to its correlated enum
             newTheme = systemThemeCode as ThemeOptions;

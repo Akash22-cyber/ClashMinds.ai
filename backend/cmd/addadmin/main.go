@@ -1,9 +1,9 @@
 package main
 
 import (
-	"clashminds/config"
-	"clashminds/db"
-	"clashminds/models"
+	"arguehub/config"
+	"arguehub/db"
+	"arguehub/models"
 	"context"
 	"flag"
 	"fmt"

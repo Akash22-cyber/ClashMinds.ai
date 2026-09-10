@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"clashminds/db"
+	"arguehub/db"
 
 	"go.mongodb.org/mongo-driver/bson"
 )

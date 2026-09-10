@@ -6,10 +6,10 @@ import (
 	"math"
 	"time"
 
-	"clashminds/config"
-	"clashminds/db"
-	"clashminds/models"
-	"clashminds/rating"
+	"arguehub/config"
+	"arguehub/db"
+	"arguehub/models"
+	"arguehub/rating"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"

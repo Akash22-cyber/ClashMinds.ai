@@ -359,12 +359,7 @@ const TeamDebateRoom: React.FC = () => {
       }
 
       const pc = new RTCPeerConnection({
-        iceServers: [
-        { urls: "stun:stun.l.google.com:19302" },
-        { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
-        { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
-        { urls: "turn:openrelay.metered.ca:443?transport=tcp", username: "openrelayproject", credential: "openrelayproject" }
-      ],
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
       });
 
       pcRefs.current.set(remoteUserId, pc);
@@ -644,9 +639,8 @@ const TeamDebateRoom: React.FC = () => {
                 `${debateId}_${debatePhase}_${localRole}`,
                 existingTranscript
               );
-              // Only advance if it's my turn
-              handlePhaseDone();
             }
+            handlePhaseDone();
             return 0;
           }
           return prev - 1;
@@ -659,7 +653,7 @@ const TeamDebateRoom: React.FC = () => {
   }, [timer, debatePhase, isMyTurn, speechTranscripts, localRole, debateId]);
 
   useEffect(() => {
-  currentUserIdRef.current = currentUser?.id ?? null;
+  currentUserIdRef.current = currentUser?.id;
   myTeamIdRef.current = myTeamId;
   isTeam1Ref.current = isTeam1;
   debatePhaseRef.current = debatePhase;
@@ -744,6 +738,7 @@ const TeamDebateRoom: React.FC = () => {
       const amTeam1 = isTeam1Ref.current;
       const currentMyTeamId = myTeamIdRef.current;
       const currentUserId = currentUserIdRef.current;
+      const currentPhase = debatePhaseRef.current;
 
       switch (data.type) {
         case "stateSync": {
@@ -1804,7 +1799,7 @@ const TeamDebateRoom: React.FC = () => {
                             <div key={member.userId} className="flex items-center gap-3">
                               <div className="relative">
                                 <img
-                                  src={member.avatarUrl || "https://avatar.iran.liara.run/public/31"}
+                                  src={member.avatarUrl || "https://api.dicebear.com/9.x/big-ears/svg?seed=Nolan"}
                                   alt={member.displayName}
                                   className="w-10 h-10 rounded-full object-cover border-2 border-gray-300"
                                 />
@@ -1841,7 +1836,7 @@ const TeamDebateRoom: React.FC = () => {
                             <div key={member.userId} className="flex items-center gap-3">
                               <div className="relative">
                                 <img
-                                  src={member.avatarUrl || "https://avatar.iran.liara.run/public/31"}
+                                  src={member.avatarUrl || "https://api.dicebear.com/9.x/big-ears/svg?seed=Nolan"}
                                   alt={member.displayName}
                                   className="w-10 h-10 rounded-full object-cover border-2 border-gray-300"
                                 />
@@ -1937,10 +1932,7 @@ const TeamDebateRoom: React.FC = () => {
           judgment={judgmentData}
           forRole={localRole === "for" ? "Your Team" : "Opponent Team"}
           againstRole={localRole === "against" ? "Your Team" : "Opponent Team"}
-          onClose={() => {
-            setShowJudgment(false);
-            navigate("/profile");
-          }}
+          onClose={() => setShowJudgment(false)}
         />
       )}
 

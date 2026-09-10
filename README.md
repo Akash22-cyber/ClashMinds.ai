@@ -1,229 +1,217 @@
-# ClashMinds.ai 🧠⚔️
+<p align="left">
+  <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRpPlI1P7SK3pemg67VMPbvNzxYyk0UtlmJiQ&s" alt="Aossie Logo" height="120"/>
+</p>
 
-**ClashMinds.ai** is an advanced AI-powered debating platform that enables users to participate in structured, real-time debates with intelligent AI opponents.  
-The platform includes a **“Practice with Bot”** mode featuring voice-based debates, timed speaking rounds, and live AI responses to help users improve communication, critical thinking, and argument-building skills.
-
----
-
-# ✨ Features
-
-- 🎙️ **Voice-Based AI Debates**  
-  Practice debates with an AI bot using real-time voice interaction.
-
-- ⏱️ **30-Second Speaking Windows**  
-  Structured turn-based debate system with timed speaking rounds.
-
-- 🔄 **Real-Time Communication**  
-  Instant synchronization powered by WebSockets.
-
-- 🤖 **AI-Powered Responses**  
-  Integrated with Google GenAI SDK for intelligent debate generation.
-
-- 🔐 **Authentication & RBAC**  
-  Secure authentication using JWT and role-based authorization using Casbin.
-
-- 📊 **Interactive UI/UX**  
-  Modern and responsive interface built with Tailwind CSS and Radix UI.
-
-- 🎉 **Engaging Experience**  
-  Includes animations, charts, and interactive visual elements.
+<h1 align="right">
+  <b>Akash22-cyber | CLASHMIND.ai</b>
+</h1>
 
 ---
 
-# 🚀 Tech Stack
+## About CLASHMIND.ai
 
-## Frontend
-- **Framework:** React 18 + Vite
-- **Language:** TypeScript
-- **Styling:** Tailwind CSS, Radix UI
-- **State Management:** Jotai
-- **Routing:** React Router DOM
-- **Animations & Visualization:** React Spring, Recharts, React Confetti
+**CLASHMIND.ai** is an AI-enhanced, real-time debating platform designed to sharpen communication skills. Whether competing against human opponents or LLM-powered AI challengers, users can participate in structured debates that mimic formal competitions.
 
-## Backend
-- **Framework:** Go (Gin Web Framework)
-- **Database:** MongoDB
-- **Caching / PubSub:** Redis
-- **Real-Time Communication:** Gorilla WebSocket
-- **Authentication:** JWT
-- **Authorization:** Casbin (RBAC)
-- **AI Integration:** Google GenAI SDK
-- **Speech Transcription:** Python-based transcription service
+### Key Features
+
+- **User vs. User Debates**
+- Real-time debates via **WebSockets**, **WebRTC** (audio/video/text)
+- Structured formats: **opening**, **cross-exam**, and **closing**
+
+- **User vs. AI Debates**
+- LLM-generated counterarguments that adapt to your input
+
+- **Custom Debate Rooms**
+- Create private, topic-specific debate spaces
 
 ---
 
-# 📋 Prerequisites
+## Project Setup Guide
 
-Make sure the following are installed before running the project:
-
-- [Node.js](https://nodejs.org/) (v18 or higher)
-- [Go](https://go.dev/) (v1.24 or higher)
-- [MongoDB](https://www.mongodb.com/)
-- [Redis](https://redis.io/)
-- [Python 3](https://www.python.org/)
+### Backend Configuration
+### Prerequisites
+- Go (version 1.20 or later)
+- MongoDB (local instance or MongoDB Atlas)
 
 ---
 
-# 📁 Project Structure
+### 1. Create the Backend Config File
+
+The backend expects a `config.prod.yml` file at runtime.  
+Only a sample config file is provided in the repository.
+
+Create the required config file by copying the sample:
 
 ```bash
-ClashMinds.ai/
-│
-├── frontend/          # React frontend
-├── backend/           # Go backend
-├── README.md
-│
-└── ...
+cd backend/config
+cp config.prod.sample.yml config.prod.yml
 ```
 
 ---
 
-# 🛠️ Setup & Installation
+### 2. Configure MongoDB
 
-## 1️⃣ Clone the Repository
+Update `backend/config/config.prod.yml` with a valid MongoDB connection string:
 
-```bash
-git clone <your-repository-url>
-cd ClashMinds.ai
+```yaml
+database:
+  uri: "<YOUR_MONGODB_URI>"
+```
+
+Without a valid MongoDB URI, the backend will fail to start.
+
+---
+
+### 3. (Optional) Gemini API Configuration
+
+If the Gemini API key is not configured, the backend will still run, but AI-related features will be disabled.
+
+```yaml
+gemini:
+  apiKey: "<YOUR_GEMINI_API_KEY>"
 ```
 
 ---
 
-# ⚙️ Backend Setup
+### 4. Run the Backend Server
 
-Navigate to the backend folder:
-
-```bash
-cd backend
-```
-
-## Install Go Dependencies
-
-```bash
-go mod download
-```
-
-## Configure Environment Variables
-
-Create a `.env` file inside the backend directory and add:
-
-```env
-MONGO_URI=your_mongodb_uri
-REDIS_URL=your_redis_url
-GOOGLE_API_KEY=your_google_api_key
-JWT_SECRET=your_jwt_secret
-```
-
-## Start Backend Server
+From the `backend` directory, start the server:
 
 ```bash
 go run cmd/server/main.go
 ```
 
-Backend server will run on the configured port.
+The server will start on the port defined in the config file (default: `1313`).
 
 ---
 
-# 💻 Frontend Setup
+### Notes
+- Do **not** commit `config.prod.yml` to version control.
+- Only `config.prod.sample.yml` should remain committed.
 
-Navigate to the frontend folder:
 
-```bash
-cd frontend
+### Frontend Configuration
+
+1. In the `frontend/` directory, create a file named `.env`.
+
+2. Add the following environment variables to the `.env` file:
+
+```
+VITE_BASE_URL="http://localhost:1313"
+VITE_GOOGLE_CLIENT_ID="<YOUR_GOOGLE_OAUTH_CLIENT_ID>"
 ```
 
-## Install Dependencies
+- Replace `<YOUR_GOOGLE_OAUTH_CLIENT_ID>` with your actual Google OAuth Client ID from Google Cloud Console.
 
-```bash
-npm install
+> **Note:** Do **not** commit this file to a public repository. Add `.env` to your `.gitignore` to keep it secure.
+
+---
+
+### Running the Frontend (React + Vite)
+
+1. Open a new terminal and navigate to the frontend directory:
+
+   ```
+   cd frontend
+   ```
+
+2. Install dependencies:
+
+   ```
+   npm install
+   ```
+
+3. Create a `.env` file and add:
+
+   ```
+   VITE_BASE_URL="http://localhost:1313"
+   ```
+
+4. Start the development server:
+   ```
+   npm run dev
+   ```
+
+---
+
+## Contribution Guidelines
+
+Thank you for your interest in contributing to **CLASHMIND.ai**! We appreciate your efforts in making this project better. Please follow these best practices to ensure smooth collaboration.
+
+### How to Contribute
+
+#### 1. Fork the Repository
+
+- Navigate to the [CLASHMIND.ai repository](https://github.com/Akash22-cyber/ClashMinds.ai).
+- Click the **Fork** button in the top right corner.
+- Clone the forked repository to your local machine:
+
+```sh
+git clone https://github.com/your-username/CLASHMIND.ai.git
+cd CLASHMIND.ai
 ```
 
-## Start Development Server
+#### 2. Create a Feature Branch
 
-```bash
-npm run dev
+- Always create a new branch for your contributions:
+
+```sh
+git checkout -b feature-name
 ```
 
-Frontend will typically run at:
+#### 3. Make Changes and Commit
 
-```bash
-http://localhost:5173
+- Follow coding best practices and maintain code consistency.
+- Write clear commit messages:
+
+```sh
+git commit -m "Added [feature/fix]: Short description"
 ```
 
----
+#### 4. Push Changes and Open a Pull Request
 
-# 🔊 Speech Transcription Service
+- Push your changes to your forked repository:
 
-The project includes a Python-based transcription service for handling voice input.
-
-Make sure Python dependencies are installed before running the transcription module.
-
-Example:
-
-```bash
-pip install -r requirements.txt
+```sh
+git push origin feature-name
 ```
 
----
-
-# 🔐 Security Features
-
-- JWT-based Authentication
-- Role-Based Access Control (RBAC) using Casbin
-- Secure WebSocket communication
-- Environment-based secret management
+- Navigate to the original repository and open a **Pull Request (PR)**.
+- Provide a detailed description of the changes in the PR.
 
 ---
 
-# 📡 Real-Time Architecture
+### Best Practices
 
-ClashMinds.ai uses WebSockets for:
-
-- Live debate synchronization
-- Real-time AI responses
-- Timer updates
-- Voice interaction events
+- **Code Quality**: Ensure your code is clean, readable, and consistent with the existing codebase.
+- **Testing**: Test your changes locally before submitting a PR.
+- **Security**: Never commit sensitive information (e.g., API keys or passwords).
+- **Communication**: Be responsive to reviews and update your PRs as requested.
 
 ---
 
-# 🎯 Use Cases
+### Submitting a Video Demonstration
 
-- Debate practice for students
-- Public speaking improvement
-- AI-powered communication training
-- Interview preparation
-- Critical thinking exercises
+To help maintainers understand your changes, consider submitting a short video showcasing the feature or fix:
 
----
-
-# 📸 Future Enhancements
-
-- Multiplayer debate rooms
-- AI performance analytics
-- Debate history & scoring
-- Speech emotion analysis
-- Leaderboards and rankings
+- Record a short demo (you can use tools like Loom or OBS).
+- Upload and include the video link in your Pull Request description.
 
 ---
 
-# 🤝 Contributing
+### Reporting Issues
 
-Contributions are welcome!
+If you find a bug or have a feature request:
 
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to your branch
-5. Open a Pull Request
+- Open an issue [here](https://github.com/Akash22-cyber/ClashMinds.ai/issues).
+- Clearly describe the problem and, if possible, suggest solutions.
 
----
-
-# 📄 License
-
-This project is licensed under the MIT License.
+We look forward to your contributions!
 
 ---
 
-# 👨‍💻 Author
+## License
 
-Developed with ❤️ by the ClashMinds.ai Team
+MIT © [Akash22-cyber](https://aossie.org)
+
+---

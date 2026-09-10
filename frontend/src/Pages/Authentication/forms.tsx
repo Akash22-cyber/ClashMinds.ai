@@ -47,44 +47,28 @@ const handleGoogleLogin = useCallback(
   [googleLogin]
 );
   useEffect(() => {
-    let interval: any;
+    const google = window.google;
+    if (!google?.accounts) {
+      return;
+    }
 
-    const initGoogle = () => {
-      const google = window.google;
-      if (!google?.accounts) return false;
+    google.accounts.id.initialize({
+      client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+      callback: handleGoogleLogin,
+    });
 
-      google.accounts.id.initialize({
-        client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
-        callback: handleGoogleLogin,
-        auto_select: false,
+    const buttonElement = document.getElementById('googleSignInButton');
+    if (buttonElement) {
+      google.accounts.id.renderButton(buttonElement, {
+        theme: 'outline',
+        size: 'large',
+        text: 'signin_with',
+        width: '100%',
       });
-
-      const buttonElement = document.getElementById('googleSignInButton');
-      if (buttonElement) {
-        google.accounts.id.renderButton(buttonElement, {
-          theme: 'outline',
-          size: 'large',
-          text: 'signin_with',
-          width: '100%',
-        });
-      }
-      return true;
-    };
-
-    if (!initGoogle()) {
-      interval = setInterval(() => {
-        if (initGoogle()) clearInterval(interval);
-      }, 500);
     }
 
     return () => {
-      if (interval) clearInterval(interval);
-      // Only cancel if initialized to avoid errors
-      try {
-        window.google?.accounts?.id?.cancel();
-      } catch (err) {
-        console.warn("Error during Google accounts cleanup:", err);
-      }
+      google.accounts.id.cancel();
     };
   }, [handleGoogleLogin]);
 
@@ -175,42 +159,28 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ startOtpVerification }) 
 
 
   useEffect(() => {
-    let interval: any;
+    const google = window.google;
+    if (!google?.accounts) {
+      return;
+    }
 
-    const initGoogle = () => {
-      const google = window.google;
-      if (!google?.accounts) return false;
+    google.accounts.id.initialize({
+      client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+      callback: handleGoogleLogin,
+    });
 
-      google.accounts.id.initialize({
-        client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
-        callback: handleGoogleLogin,
+    const buttonElement = document.getElementById('googleSignUpButton');
+    if (buttonElement) {
+      google.accounts.id.renderButton(buttonElement, {
+        theme: 'outline',
+        size: 'large',
+        text: 'signup_with',
+        width: '100%',
       });
-
-      const buttonElement = document.getElementById('googleSignUpButton');
-      if (buttonElement) {
-        google.accounts.id.renderButton(buttonElement, {
-          theme: 'outline',
-          size: 'large',
-          text: 'signup_with',
-          width: '100%',
-        });
-      }
-      return true;
-    };
-
-    if (!initGoogle()) {
-      interval = setInterval(() => {
-        if (initGoogle()) clearInterval(interval);
-      }, 500);
     }
 
     return () => {
-      if (interval) clearInterval(interval);
-      try {
-        window.google?.accounts?.id?.cancel();
-      } catch (err) {
-        console.warn("Error during Google accounts cleanup:", err);
-      }
+      google.accounts.id.cancel();
     };
   }, [handleGoogleLogin]);
 

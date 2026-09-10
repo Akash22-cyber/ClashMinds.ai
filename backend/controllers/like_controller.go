@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strings"
 
-	"clashminds/db"
-	"clashminds/utils"
+	"arguehub/db"
+	"arguehub/utils"
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"

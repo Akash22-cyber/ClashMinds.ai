@@ -1,6 +1,6 @@
 import React, { useState, useContext, useEffect } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { Bell, Menu, X, Home, BarChart, User, Info, LogOut, Heart, Copy, Check } from "lucide-react";
+import { Bell, Menu, X, Home, BarChart, User, Info, LogOut, Heart } from "lucide-react";
 import { useAtom } from "jotai";
 import { userAtom } from "@/state/userAtom";
 import { AuthContext } from "@/context/authContext";
@@ -19,8 +19,22 @@ import {
 } from "@/components/ui/breadcrumb";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
+import debateAiLogo from "@/assets/aossie.png";
 import avatarImage from "@/assets/avatar2.jpg";
+import { DEFAULT_AVATAR_URL } from "@/constants/avatar";
 import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification, Notification } from "@/services/notificationService";
+
+const handleAvatarLoadError = (event: React.SyntheticEvent<HTMLImageElement>) => {
+  const image = event.currentTarget;
+
+  if (image.src !== DEFAULT_AVATAR_URL) {
+    image.src = DEFAULT_AVATAR_URL;
+    return;
+  }
+
+  image.onerror = null;
+  image.src = avatarImage;
+};
 
 /**
  * Header component providing breadcrumb navigation, notifications, 
@@ -35,15 +49,6 @@ function Header() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
-
-  const copyToClipboard = () => {
-    if (user?.id) {
-      navigator.clipboard.writeText(user.id);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
 
   const toggleDrawer = () => setIsDrawerOpen(!isDrawerOpen);
 
@@ -117,7 +122,7 @@ function Header() {
                 <BreadcrumbItem>
                   {isLast ? (
                     <BreadcrumbPage className="capitalize">
-                      {value === "support-debateai" 
+                      {value === "support-clashmind.ai" 
                         ? "Support CLASHMIND.ai" 
                         : value === "bot-selection" 
                         ? "Bot Selection" 
@@ -126,7 +131,7 @@ function Header() {
                   ) : (
                     <BreadcrumbLink asChild>
                       <NavLink to={to} className="capitalize">
-                        {value === "support-debateai" 
+                        {value === "support-clashmind.ai" 
                           ? "Support CLASHMIND.ai" 
                           : value === "bot-selection" 
                           ? "Bot Selection" 
@@ -227,8 +232,9 @@ function Header() {
                 className="focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-full transition-opacity"
               >
                 <img
-                  src={user?.avatarUrl || avatarImage}
+                  src={user?.avatarUrl || DEFAULT_AVATAR_URL}
                   alt="User avatar"
+                  onError={handleAvatarLoadError}
                   className="w-8 h-8 rounded-full border-2 border-border object-cover cursor-pointer hover:opacity-80 transition-opacity"
                 />
               </button>
@@ -237,8 +243,9 @@ function Header() {
               <div className="p-4 border-b border-border">
                 <div className="flex items-center gap-3 mb-3">
                   <img
-                    src={user?.avatarUrl || avatarImage}
+                    src={user?.avatarUrl || DEFAULT_AVATAR_URL}
                     alt="User avatar"
+                    onError={handleAvatarLoadError}
                     className="w-12 h-12 rounded-full border-2 border-border object-cover"
                   />
                   <div className="overflow-hidden">
@@ -247,22 +254,11 @@ function Header() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <div className="flex justify-between items-center text-sm">
+                  <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">User ID</span>
-                    <div className="flex items-center gap-1">
-                      <span className="font-mono text-xs bg-muted px-2 py-0.5 rounded text-muted-foreground truncate max-w-[150px]" title={user?.id}>
-                        {user?.id || "N/A"}
-                      </span>
-                      {user?.id && (
-                        <button
-                          onClick={copyToClipboard}
-                          className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-                          title="Copy User ID"
-                        >
-                          {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
-                        </button>
-                      )}
-                    </div>
+                    <span className="font-mono text-xs bg-muted px-2 py-0.5 rounded text-muted-foreground truncate max-w-[150px]" title={user?.id}>
+                      {user?.id || "N/A"}
+                    </span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Rating</span>
@@ -304,7 +300,6 @@ function Header() {
                 <span className="text-xl font-bold">
                   CLASHMIND.ai
                 </span>
-
               </div>
               <button
                 onClick={toggleDrawer}
@@ -340,7 +335,7 @@ function Header() {
                 onClick={toggleDrawer}
               />
               <NavItem
-                to="/support-debateai"
+                to="/support-clashmind.ai"
                 label="Support CLASHMIND.ai"
                 icon={<Heart className="mr-3 h-4 w-4 text-red-500 transition-all duration-300 group-hover:fill-red-500 group-hover:scale-110" />}
                 onClick={toggleDrawer}

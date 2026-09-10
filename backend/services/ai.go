@@ -9,7 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
-	appConfig "clashminds/config"
+	appConfig "arguehub/config"
 	"strings"
 )
 

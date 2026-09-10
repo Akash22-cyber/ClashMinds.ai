@@ -8,9 +8,8 @@ import (
 	"strconv"
 	"time"
 
-	"clashminds/db"
-	"clashminds/models"
-	"clashminds/services"
+	"arguehub/db"
+	"arguehub/services"
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
@@ -45,8 +44,7 @@ func generateRoomID() string {
 // CreateRoomHandler handles POST /rooms and creates a new debate room.
 func CreateRoomHandler(c *gin.Context) {
 	type CreateRoomInput struct {
-		Type       string `json:"type"` // public, private, invite
-		OpponentID string `json:"opponentId,omitempty"`
+		Type string `json:"type"` // public, private, invite
 	}
 
 	var input CreateRoomInput
@@ -63,9 +61,15 @@ func CreateRoomHandler(c *gin.Context) {
 	}
 
 	// Query user document using email
-	userCollection := db.MongoClient.Database("DebateAI").Collection("users")
+	userCollection := db.MongoDatabase.Collection("users")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+
+	emailStr, ok := email.(string)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid email format"})
+		return
+	}
 
 	var user struct {
 		ID          primitive.ObjectID `bson:"_id"`
@@ -75,7 +79,7 @@ func CreateRoomHandler(c *gin.Context) {
 		AvatarURL   string             `bson:"avatarUrl"`
 	}
 
-	err := userCollection.FindOne(ctx, bson.M{"email": email}).Decode(&user)
+	err := userCollection.FindOne(ctx, bson.M{"email": emailStr}).Decode(&user)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 		return
@@ -98,32 +102,11 @@ func CreateRoomHandler(c *gin.Context) {
 		Participants: []Participant{creatorParticipant},
 	}
 
-	roomCollection := db.MongoClient.Database("DebateAI").Collection("rooms")
+	roomCollection := db.MongoDatabase.Collection("rooms")
 	_, err = roomCollection.InsertOne(ctx, newRoom)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create room"})
 		return
-	}
-
-	// Send notification if an opponent was specified
-	if input.OpponentID != "" && input.OpponentID != user.ID.Hex() {
-		opponentObjID, err := primitive.ObjectIDFromHex(input.OpponentID)
-		if err == nil {
-			// Check if opponent exists
-			var opponent struct {
-				ID primitive.ObjectID `bson:"_id"`
-			}
-			err = userCollection.FindOne(ctx, bson.M{"_id": opponentObjID}).Decode(&opponent)
-			if err == nil {
-				_ = services.CreateNotification(
-					opponentObjID,
-					models.NotificationTypeInvite,
-					"Debate Challenge",
-					"You have been challenged to a debate by "+user.DisplayName+".",
-					"/debate-room/"+roomID,
-				)
-			}
-		}
 	}
 
 	c.JSON(http.StatusOK, newRoom)
@@ -132,7 +115,7 @@ func CreateRoomHandler(c *gin.Context) {
 // GetRoomsHandler handles GET /rooms and returns all rooms.
 func GetRoomsHandler(c *gin.Context) {
 
-	collection := db.MongoClient.Database("DebateAI").Collection("rooms")
+	collection := db.MongoDatabase.Collection("rooms")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -163,7 +146,7 @@ func JoinRoomHandler(c *gin.Context) {
 	}
 
 	// Query user document using email
-	userCollection := db.MongoClient.Database("DebateAI").Collection("users")
+	userCollection := db.MongoDatabase.Collection("users")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -197,7 +180,7 @@ func JoinRoomHandler(c *gin.Context) {
 	}
 
 	// Use atomic operation to join room
-	roomCollection := db.MongoClient.Database("DebateAI").Collection("rooms")
+	roomCollection := db.MongoDatabase.Collection("rooms")
 	filter := bson.M{"_id": roomId}
 	update := bson.M{
 		"$addToSet": bson.M{"participants": participant},
@@ -229,8 +212,8 @@ func GetRoomParticipantsHandler(c *gin.Context) {
 	}
 
 	// Query room document
-	roomCollection := db.MongoClient.Database("DebateAI").Collection("rooms")
-	userCollection := db.MongoClient.Database("DebateAI").Collection("users")
+	roomCollection := db.MongoDatabase.Collection("rooms")
+	userCollection := db.MongoDatabase.Collection("users")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 

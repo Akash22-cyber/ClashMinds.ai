@@ -4,8 +4,10 @@ import { useUser } from '../hooks/useUser';
 import ProfileHover from './ProfileHover';
 import UserProfileModal from './UserProfileModal';
 import {
+  commentsByTranscriptAtom,
   getCommentsForTranscriptAtom,
   setCommentsForTranscriptAtom,
+  addCommentToTranscriptAtom,
   removeCommentFromTranscriptAtom,
   type Comment,
 } from '../state/commentsAtom';
@@ -227,6 +229,7 @@ const CommentTree: React.FC<CommentTreeProps> = ({
   const { user } = useUser();
   const [commentsAtom] = useAtom(getCommentsForTranscriptAtom(transcriptId));
   const [, setCommentsAtom] = useAtom(setCommentsForTranscriptAtom(transcriptId));
+  const [, addCommentAtom] = useAtom(addCommentToTranscriptAtom(transcriptId));
   const [, removeCommentAtom] = useAtom(removeCommentFromTranscriptAtom(transcriptId));
   
   const [comments, setComments] = useState<Comment[]>([]);
@@ -388,7 +391,8 @@ const CommentTree: React.FC<CommentTreeProps> = ({
         throw new Error(errorData.error || 'Failed to post comment');
       }
 
-      await response.json();
+      const result = await response.json();
+      const newComment: Comment = result.comment;
       
       // Fetch updated comments (including the new one) and update atom
       await fetchComments();
@@ -617,7 +621,7 @@ const CommentTree: React.FC<CommentTreeProps> = ({
   return (
     <div className={`comment-tree ${className}`}>
       <div className="mb-4">
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">Comments</h3>
+        <h3 className="text-lg font-semibold text-foreground mb-2">Comments</h3>
         {error && (
           <div className="p-2 mb-2 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
             {error}

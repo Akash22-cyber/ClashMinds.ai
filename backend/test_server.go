@@ -1,10 +1,9 @@
 package main
 
 import (
-	"fmt"
 	"time"
 
-	"clashminds/services"
+	"arguehub/services"
 )
 
 func main() {
@@ -22,7 +21,7 @@ func main() {
 	}
 
 	// Check pool - should be empty since no one started matchmaking
-	_ = ms.GetPool()
+	pool := ms.GetPool()
 
 	// Start matchmaking for both users
 	err = ms.StartMatchmaking("user1")
@@ -34,10 +33,9 @@ func main() {
 	}
 
 	// Check pool - should have 2 users now
-	pool := ms.GetPool()
+	pool = ms.GetPool()
 
 	for _, user := range pool {
-		fmt.Printf("User in pool: %s\n", user.Username)
 	}
 
 	// Wait a bit for matching
@@ -47,7 +45,6 @@ func main() {
 	pool = ms.GetPool()
 
 	for _, user := range pool {
-		fmt.Printf("User in pool after matching: %s\n", user.Username)
 	}
 
 }

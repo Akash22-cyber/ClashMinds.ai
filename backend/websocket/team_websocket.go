@@ -11,10 +11,10 @@ import (
 	"sync"
 	"time"
 
-	"clashminds/db"
-	"clashminds/models"
-	"clashminds/services"
-	"clashminds/utils"
+	"arguehub/db"
+	"arguehub/models"
+	"arguehub/services"
+	"arguehub/utils"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"

@@ -4,8 +4,8 @@ import (
 	"flag"
 	"fmt"
 
-	"clashminds/config"
-	"clashminds/services"
+	"arguehub/config"
+	"arguehub/services"
 )
 
 func main() {

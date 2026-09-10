@@ -5,6 +5,7 @@ import { AuthContext } from "@/context/authContext";
 import DebateCover from "../assets/DebateCover4.svg";
 import { RiRobot2Fill } from "react-icons/ri";
 import { FaHandshakeSimpleSlash } from "react-icons/fa6";
+import ClashMindsLogo from "@/assets/aossie.png";
 
 const Home: React.FC = () => {
   const navigate = useNavigate();

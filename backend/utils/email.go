@@ -7,7 +7,7 @@ import (
 	"net/smtp"
 	"strings"
 
-	"clashminds/config"
+	"arguehub/config"
 )
 
 // GenerateRandomCode generates a random numeric code of specified length

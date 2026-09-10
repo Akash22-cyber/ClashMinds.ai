@@ -5,17 +5,8 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { Button } from "../components/ui/button";
-import { 
-  Mic, 
-  MicOff, 
-  Video, 
-  VideoOff, 
-  LogOut,
-  Check,
-  Sparkles
-} from "lucide-react";
 
 import JudgmentPopup from "@/components/JudgementPopup";
 import SpeechTranscripts from "@/components/SpeechTranscripts";
@@ -87,6 +78,8 @@ interface UserDetails {
   avatarUrl?: string;
   displayName?: string;
   email?: string;
+  role?: DebateRole;
+  ready?: boolean;
 }
 
 // Define WebSocket message structure
@@ -176,6 +169,7 @@ const OnlineDebateRoom = (): JSX.Element => {
   const [opponentUser, setOpponentUser] = useState<UserDetails | null>(null);
   const [roomParticipants, setRoomParticipants] = useState<UserDetails[]>([]);
   const [roomOwnerId, setRoomOwnerId] = useState<string | null>(null);
+  const [isWsConnected, setIsWsConnected] = useState(false);
 
   const isRoomOwner = Boolean(roomOwnerId && currentUserId === roomOwnerId);
 
@@ -192,7 +186,13 @@ const OnlineDebateRoom = (): JSX.Element => {
   const spectatorBaseIdRef = useRef<Map<string, Set<string>>>(new Map());
   const localStreamRef = useRef<MediaStream | null>(null);
   const localRoleRef = useRef<DebateRole | null>(null);
+  const peerRoleRef = useRef<DebateRole | null>(null);
+  const debatePhaseRef = useRef<DebatePhase>(DebatePhase.Setup);
   const currentUserIdRef = useRef<string | null>(currentUserId);
+  const currentUserRef = useRef(currentUser);
+  const fetchRoomParticipantsRef = useRef<
+    ((retryCount?: number, background?: boolean) => Promise<void>) | null
+  >(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -201,9 +201,6 @@ const OnlineDebateRoom = (): JSX.Element => {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const judgePollRef = useRef<NodeJS.Timeout | null>(null);
   const submissionStartedRef = useRef(false);
-  const pcInitiatedRef = useRef(false);
-  const mediaErrorRef = useRef(false);
-  const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
 
   useEffect(() => {
     return () => {
@@ -216,10 +213,6 @@ const OnlineDebateRoom = (): JSX.Element => {
 
   // State for debate setup and signaling
   const [topic, setTopic] = useState("");
-  const [localTopic, setLocalTopic] = useState("");
-  const [speechTopicBuffer, setSpeechTopicBuffer] = useState("");
-  const isTypingTopicRef = useRef(false);
-  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [localRole, setLocalRole] = useState<DebateRole | null>(null);
   const [peerRole, setPeerRole] = useState<DebateRole | null>(null);
   const [localReady, setLocalReady] = useState(false);
@@ -251,28 +244,6 @@ const OnlineDebateRoom = (): JSX.Element => {
   const [audioError, setAudioError] = useState<string | null>(null);
   const [isManualRecording, setIsManualRecording] = useState(false);
 
-  const [isMicMuted, setIsMicMuted] = useState(false);
-  const [isCameraOff, setIsCameraOff] = useState(false);
-  const navigate = useNavigate();
-
-  const toggleMic = useCallback(() => {
-    if (localStream) {
-      localStream.getAudioTracks().forEach((track) => {
-        track.enabled = !track.enabled;
-      });
-      setIsMicMuted((prev) => !prev);
-    }
-  }, [localStream]);
-
-  const toggleCamera = useCallback(() => {
-    if (localStream) {
-      localStream.getVideoTracks().forEach((track) => {
-        track.enabled = !track.enabled;
-      });
-      setIsCameraOff((prev) => !prev);
-    }
-  }, [localStream]);
-
   // Speech recognition state
   const [isListening, setIsListening] = useState(false);
   const [, setCurrentTranscript] = useState("");
@@ -280,11 +251,6 @@ const OnlineDebateRoom = (): JSX.Element => {
   const [, setSpeechError] = useState<string | null>(null);
   const retryCountRef = useRef<number>(0);
   const manualRecordingRef = useRef(false);
-
-  // Keep localStreamRef in sync with localStream state
-  useEffect(() => {
-    localStreamRef.current = localStream;
-  }, [localStream]);
 
   const cleanupSpectatorConnection = useCallback((connectionId: string) => {
     const pc = spectatorPCsRef.current.get(connectionId);
@@ -337,35 +303,17 @@ const OnlineDebateRoom = (): JSX.Element => {
   }, [localRole]);
 
   useEffect(() => {
-    currentUserIdRef.current = currentUserId;
-  }, [currentUserId]);
+    peerRoleRef.current = peerRole;
+  }, [peerRole]);
 
   useEffect(() => {
-    if (roomParticipants.length === 2 && pcRef.current && currentUserId && (localStream || mediaErrorRef.current)) {
-      const opponent = roomParticipants.find(p => p.id !== currentUserId && p.email !== currentUser?.email);
-      if (opponent && opponent.id && currentUserId < opponent.id && !pcInitiatedRef.current) {
-        pcInitiatedRef.current = true;
-        const initiateOffer = async () => {
-          if (!pcRef.current || pcRef.current.signalingState !== "stable") return;
-          try {
-            const offer = await pcRef.current.createOffer();
-            await pcRef.current.setLocalDescription(offer);
-            let retries = 0;
-            while (wsRef.current?.readyState !== WebSocket.OPEN && retries < 10) {
-              await new Promise(r => setTimeout(r, 500));
-              retries++;
-            }
-            if (wsRef.current?.readyState === WebSocket.OPEN) {
-              wsRef.current.send(JSON.stringify({ type: "offer", offer, userId: currentUserId }));
-            }
-          } catch (err) {
-            console.error("Error creating WebRTC offer:", err);
-          }
-        };
-        setTimeout(initiateOffer, 100);
-      }
-    }
-  }, [roomParticipants, currentUserId, currentUser, localStream]);
+    debatePhaseRef.current = debatePhase;
+  }, [debatePhase]);
+
+  useEffect(() => {
+    currentUserIdRef.current = currentUserId;
+    currentUserRef.current = currentUser;
+  }, [currentUser, currentUserId]);
 
   const startSpectatorOffer = useCallback(
     async (baseConnectionId: string, requestId?: string) => {
@@ -393,12 +341,7 @@ const OnlineDebateRoom = (): JSX.Element => {
       }
 
       const pc = new RTCPeerConnection({
-        iceServers: [
-        { urls: "stun:stun.l.google.com:19302" },
-        { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
-        { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
-        { urls: "turn:openrelay.metered.ca:443?transport=tcp", username: "openrelayproject", credential: "openrelayproject" }
-      ],
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
       });
       spectatorPCsRef.current.set(connectionId, pc);
       spectatorPendingCandidatesRef.current.set(connectionId, []);
@@ -451,7 +394,7 @@ const OnlineDebateRoom = (): JSX.Element => {
             role,
           })
         );
-      } catch (error) {
+      } catch {
         cleanupSpectatorConnection(connectionId);
       }
     },
@@ -872,25 +815,24 @@ const OnlineDebateRoom = (): JSX.Element => {
     startJudgmentPolling,
   ]);
 
-  const handleEndDebate = useCallback(() => {
-    if (
-      window.confirm(
-        "Are you sure you want to end this debate? You will wait for the AI Judge evaluation."
-      )
-    ) {
+  const handleConcede = useCallback(() => {
+    if (window.confirm("Are you sure you want to concede? This will count as a loss.")) {
       if (wsRef.current) {
-        wsRef.current.send(
-          JSON.stringify({
-            type: "concede", // Keeping 'concede' message for backend rating logic
-            room: roomId,
-            userId: currentUserId,
-            username: currentUser?.displayName || "User",
-          })
-        );
+        wsRef.current.send(JSON.stringify({
+          type: "concede",
+          room: roomId,
+          userId: currentUserId,
+          username: currentUser?.displayName || "User"
+        }));
       }
       setDebatePhase(DebatePhase.Finished);
+      setPopup({
+        show: true,
+        message: "You have conceded the debate.",
+        isJudging: false,
+      });
     }
-  }, [roomId, currentUserId, currentUser, setDebatePhase, navigate]);
+  }, [roomId, currentUserId, currentUser, setDebatePhase, setPopup]);
 
   const handlePhaseDone = useCallback(() => {
     const currentIndex = phaseOrder.indexOf(debatePhase);
@@ -942,11 +884,8 @@ const OnlineDebateRoom = (): JSX.Element => {
                 `Timer expired for ${localRole} in ${debatePhase}. Transcript saved:`,
                 existingTranscript
               );
-              
-              // Only the person whose turn it is should advance the phase
-              // to prevent dual-timer race conditions over the network.
-              handlePhaseDone();
             }
+            handlePhaseDone();
             return 0;
           }
           return prev - 1;
@@ -999,10 +938,12 @@ const OnlineDebateRoom = (): JSX.Element => {
 
   // Function to fetch room participants
   const fetchRoomParticipants = useCallback(
-    async (retryCount = 0) => {
+    async (retryCount = 0, background = false) => {
       if (!roomId) return;
 
-      setIsLoading(true);
+      if (!background) {
+        setIsLoading(true);
+      }
       try {
         const token = getAuthToken();
         const response = await fetch(
@@ -1057,7 +998,7 @@ const OnlineDebateRoom = (): JSX.Element => {
                 avatarUrl:
                   currentUser.avatarUrl ||
                   localParticipant.avatarUrl ||
-                  "https://avatar.iran.liara.run/public/40",
+                  "https://api.dicebear.com/9.x/big-ears/svg?seed=Felix",
                 displayName:
                   currentUser.displayName ||
                   localParticipant.displayName ||
@@ -1075,7 +1016,7 @@ const OnlineDebateRoom = (): JSX.Element => {
                 elo: currentUser.rating || 1500,
                 avatarUrl:
                   currentUser.avatarUrl ||
-                  "https://avatar.iran.liara.run/public/40",
+                  "https://api.dicebear.com/9.x/big-ears/svg?seed=Felix",
                 email: currentUser.email || "",
               };
               setLocalUser(fallbackLocal);
@@ -1087,7 +1028,7 @@ const OnlineDebateRoom = (): JSX.Element => {
                 ...opponentParticipant,
                 avatarUrl:
                   opponentParticipant.avatarUrl ||
-                  "https://avatar.iran.liara.run/public/31",
+                  "https://api.dicebear.com/9.x/big-ears/svg?seed=Nolan",
               };
               setOpponentUser(opponentData);
               localStorage.setItem(
@@ -1130,7 +1071,7 @@ const OnlineDebateRoom = (): JSX.Element => {
             }
 
             setTimeout(() => {
-              fetchRoomParticipants(retryCount + 1);
+              fetchRoomParticipants(retryCount + 1, background);
             }, 2000);
             return;
           }
@@ -1143,7 +1084,7 @@ const OnlineDebateRoom = (): JSX.Element => {
               elo: currentUser.rating || 1500,
               avatarUrl:
                 currentUser.avatarUrl ||
-                "https://avatar.iran.liara.run/public/40",
+                "https://api.dicebear.com/9.x/big-ears/svg?seed=Felix",
               displayName: currentUser.displayName || "You",
             };
             setLocalUser(fallbackLocalUser);
@@ -1169,7 +1110,9 @@ const OnlineDebateRoom = (): JSX.Element => {
           setRoomOwnerId((prev) => prev ?? currentUser.id ?? null);
         }
       } finally {
-        setIsLoading(false);
+        if (!background) {
+          setIsLoading(false);
+        }
       }
     },
     [
@@ -1184,13 +1127,31 @@ const OnlineDebateRoom = (): JSX.Element => {
     ]
   );
 
+  useEffect(() => {
+    fetchRoomParticipantsRef.current = fetchRoomParticipants;
+  }, [fetchRoomParticipants]);
+
+  // A room join is persisted through HTTP, while the live notification is sent
+  // through WebSocket. Poll only while waiting so a missed socket event heals.
+  useEffect(() => {
+    if (!roomId || roomParticipants.length >= 2) return;
+
+    void fetchRoomParticipants(0, true);
+    const participantPoll = window.setInterval(() => {
+      void fetchRoomParticipants(0, true);
+    }, 3000);
+
+    return () => window.clearInterval(participantPoll);
+  }, [fetchRoomParticipants, roomId, roomParticipants.length]);
+
   // Initialize WebSocket, RTCPeerConnection, and media
-   
   useEffect(() => {
     const token = getAuthToken();
     if (!token || !roomId) return;
 
-   const wsUrl = `${WS_BASE_URL}/ws?room=${roomId}&token=${token}`;
+    let participantFetchTimeout: number | undefined;
+
+    const wsUrl = `${WS_BASE_URL}/ws?room=${roomId}&token=${token}`;
 
     const rws = new ReconnectingWebSocket(wsUrl, [], {
       connectionTimeout: 4000,
@@ -1202,25 +1163,29 @@ const OnlineDebateRoom = (): JSX.Element => {
     wsRef.current = rws;
 
     rws.onopen = () => {
+      setIsWsConnected(true);
       rws.send(JSON.stringify({ type: "join", room: roomId }));
       // Wait a bit before fetching participants to ensure room is fully created
-      setTimeout(() => {
-        fetchRoomParticipants();
+      participantFetchTimeout = window.setTimeout(() => {
+        void fetchRoomParticipantsRef.current?.();
       }, 1000);
       getMedia();
       flushSpectatorOfferQueue();
+    };
+
+    rws.onclose = () => {
+      setIsWsConnected(false);
+    };
+
+    rws.onerror = () => {
+      setIsWsConnected(false);
     };
 
     rws.onmessage = async (event) => {
       const data: WSMessage = JSON.parse(event.data);
       switch (data.type) {
         case "topicChange":
-          if (data.topic !== undefined) {
-            setTopic(data.topic);
-            if (!isTypingTopicRef.current) {
-              setLocalTopic(data.topic);
-            }
-          }
+          if (data.topic !== undefined) setTopic(data.topic);
           break;
         case "roleSelection":
           if (data.role) setPeerRole(data.role);
@@ -1231,27 +1196,28 @@ const OnlineDebateRoom = (): JSX.Element => {
         case "phaseChange":
           if (data.phase) {
             console.debug(
-              `Received phase change to ${data.phase}. Local role: ${localRole}`
+              `Received phase change to ${data.phase}. Local role: ${localRoleRef.current}`
             );
             setDebatePhase(data.phase);
           }
           break;
         case "message":
-          if (data.message && peerRole) {
+          if (data.message && peerRoleRef.current) {
             // Store in speech transcripts for the current phase
             setSpeechTranscripts((prev) => ({
               ...prev,
-              [debatePhase]: (prev[debatePhase] || "") + " " + data.message,
+              [debatePhaseRef.current]:
+                (prev[debatePhaseRef.current] || "") + " " + data.message,
             }));
           }
           break;
         case "autoMuteStatus":
-          if (data.userId === currentUser?.id) {
+          if (data.userId === currentUserIdRef.current) {
             setIsAutoMuted(data.isMuted || false);
 
             // Automatically mute/unmute microphone based on turn
-            if (localStream) {
-              const audioTrack = localStream.getAudioTracks()[0];
+            if (localStreamRef.current) {
+              const audioTrack = localStreamRef.current.getAudioTracks()[0];
               if (audioTrack) {
                 audioTrack.enabled = !data.isMuted;
               }
@@ -1261,7 +1227,7 @@ const OnlineDebateRoom = (): JSX.Element => {
         case "speechText":
           if (data.userId && data.speechText) {
             // Store speech text in transcripts for the specified phase
-            const targetPhase = data.phase || debatePhase;
+            const targetPhase = data.phase || debatePhaseRef.current;
             setSpeechTranscripts((prev) => {
               const updated = {
                 ...prev,
@@ -1276,7 +1242,7 @@ const OnlineDebateRoom = (): JSX.Element => {
           if (
             data.userId &&
             data.liveTranscript &&
-            data.userId !== currentUser?.id
+            data.userId !== currentUserIdRef.current
           ) {
             // Only update if it's from the opponent
             setCurrentTranscript(data.liveTranscript);
@@ -1284,7 +1250,12 @@ const OnlineDebateRoom = (): JSX.Element => {
           break;
         case "userDetails":
           if (data.userDetails) {
-            if (data.userDetails.id === currentUser?.id) {
+            const activeUser = currentUserRef.current;
+            if (
+              data.userDetails.id === activeUser?.id ||
+              (data.userDetails.email &&
+                data.userDetails.email === activeUser?.email)
+            ) {
               setLocalUser(data.userDetails);
             } else {
               setOpponentUser(data.userDetails);
@@ -1299,35 +1270,42 @@ const OnlineDebateRoom = (): JSX.Element => {
             );
             setRoomParticipants(data.roomParticipants);
             // Update local and opponent user details when participants change
-            if (currentUser && data.roomParticipants.length >= 1) {
+            const activeUser = currentUserRef.current;
+            if (activeUser && data.roomParticipants.length >= 1) {
               const localParticipant = data.roomParticipants.find(
                 (p: UserDetails) =>
-                  p.id === currentUser.id || p.email === currentUser.email
+                  p.id === activeUser.id || p.email === activeUser.email
               );
               const opponentParticipant = data.roomParticipants.find(
                 (p: UserDetails) =>
-                  (p.id && p.id !== currentUser.id) ||
-                  (!p.id && p.email && p.email !== currentUser.email)
+                  (p.id && p.id !== activeUser.id) ||
+                  (!p.id && p.email && p.email !== activeUser.email)
               );
 
               if (localParticipant) {
                 setLocalUser({
                   ...localParticipant,
                   avatarUrl:
-                    currentUser.avatarUrl || localParticipant.avatarUrl,
+                    activeUser.avatarUrl || localParticipant.avatarUrl,
                   displayName:
-                    currentUser.displayName || localParticipant.displayName,
+                    activeUser.displayName || localParticipant.displayName,
                 });
+                if (localParticipant.ready !== undefined) {
+                  setLocalReady(localParticipant.ready);
+                }
+                if (localParticipant.role) {
+                  setLocalRole(localParticipant.role);
+                }
               } else {
                 // Fallback to current user data
                 setLocalUser({
-                  id: currentUser.id || "unknown",
+                  id: activeUser.id || "unknown",
                   username:
-                    currentUser.displayName || currentUser.email || "User",
+                    activeUser.displayName || activeUser.email || "User",
                   displayName:
-                    currentUser.displayName || currentUser.email || "User",
-                  elo: currentUser.rating || 1500,
-                  avatarUrl: currentUser.avatarUrl,
+                    activeUser.displayName || activeUser.email || "User",
+                  elo: activeUser.rating || 1500,
+                  avatarUrl: activeUser.avatarUrl,
                 });
               }
 
@@ -1336,10 +1314,18 @@ const OnlineDebateRoom = (): JSX.Element => {
                   ...opponentParticipant,
                   avatarUrl:
                     opponentParticipant.avatarUrl ||
-                    "https://avatar.iran.liara.run/public/31",
+                    "https://api.dicebear.com/9.x/big-ears/svg?seed=Nolan",
                 });
+                if (opponentParticipant.ready !== undefined) {
+                  setPeerReady(opponentParticipant.ready);
+                }
+                if (opponentParticipant.role) {
+                  setPeerRole(opponentParticipant.role);
+                }
               } else {
                 setOpponentUser(null);
+                setPeerReady(false);
+                setPeerRole(null);
               }
             }
           }
@@ -1374,30 +1360,17 @@ const OnlineDebateRoom = (): JSX.Element => {
             break;
           }
           if (pcRef.current && data.offer) {
-            const processOffer = async () => {
-              let retries = 0;
-              while (!localStreamRef.current && !mediaErrorRef.current && retries < 40) {
-                await new Promise(r => setTimeout(r, 500));
-                retries++;
-              }
-              try {
-                await pcRef.current!.setRemoteDescription(new RTCSessionDescription(data.offer!));
-                for (const candidate of pendingCandidatesRef.current) {
-                  await pcRef.current!.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
-                }
-                pendingCandidatesRef.current = [];
-                const answer = await pcRef.current!.createAnswer();
-                await pcRef.current!.setLocalDescription(answer);
-                wsRef.current?.send(JSON.stringify({ type: "answer", answer, userId: currentUserId }));
-              } catch (err) {
-                console.error("Error setting remote offer:", err);
-              }
-            };
-            processOffer();
+            await pcRef.current.setRemoteDescription(data.offer!);
+            const answer = await pcRef.current.createAnswer();
+            await pcRef.current.setLocalDescription(answer);
+            wsRef.current?.send(JSON.stringify({ type: "answer", answer }));
           }
           break;
         case "answer":
-          if (data.connectionId && data.targetUserId === currentUserId) {
+          if (
+            data.connectionId &&
+            data.targetUserId === currentUserIdRef.current
+          ) {
             const spectatorPc = data.connectionId
               ? spectatorPCsRef.current.get(data.connectionId)
               : null;
@@ -1411,7 +1384,9 @@ const OnlineDebateRoom = (): JSX.Element => {
                   for (const candidate of pending) {
                     try {
                       await spectatorPc.addIceCandidate(candidate);
-                    } catch (err) {}
+                    } catch {
+                      // Ignore candidates that became invalid during reconnect.
+                    }
                   }
                   spectatorPendingCandidatesRef.current.delete(
                     data.connectionId
@@ -1424,20 +1399,16 @@ const OnlineDebateRoom = (): JSX.Element => {
           } else if (
             data.connectionId &&
             data.targetUserId &&
-            data.targetUserId !== currentUserId
+            data.targetUserId !== currentUserIdRef.current
           ) {
             // Spectator answer meant for the other debater; ignore.
           } else if (pcRef.current && data.answer) {
-            await pcRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
-            for (const candidate of pendingCandidatesRef.current) {
-              await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
-            }
-            pendingCandidatesRef.current = [];
+            await pcRef.current.setRemoteDescription(data.answer);
           }
           break;
         case "candidate":
           if (data.connectionId) {
-            if (data.userId && data.userId !== currentUserId) {
+            if (data.userId && data.userId !== currentUserIdRef.current) {
               // Candidate is intended for the other debater's copy of this spectator connection.
               break;
             }
@@ -1460,44 +1431,32 @@ const OnlineDebateRoom = (): JSX.Element => {
                     queue
                   );
                 }
-              } catch (err) {
+              } catch {
                 cleanupSpectatorConnection(data.connectionId);
               }
-            } else if (!spectatorPc) {
             }
           } else if (pcRef.current && data.candidate) {
-            if (pcRef.current.remoteDescription && pcRef.current.remoteDescription.type) {
-              await pcRef.current.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(() => {});
-            } else {
-              pendingCandidatesRef.current.push(data.candidate);
-            }
+            await pcRef.current.addIceCandidate(data.candidate);
           }
           break;
       }
     };
+
     const pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: "stun:stun.l.google.com:19302" },
-        { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
-        { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
-        { urls: "turn:openrelay.metered.ca:443?transport=tcp", username: "openrelayproject", credential: "openrelayproject" }
-      ],
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
     pcRef.current = pc;
 
     pc.onicecandidate = (event) => {
       if (event.candidate && wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(
-          JSON.stringify({ type: "candidate", candidate: event.candidate, userId: currentUserIdRef.current })
+          JSON.stringify({ type: "candidate", candidate: event.candidate })
         );
       }
     };
 
     pc.ontrack = (event) => {
-      if (event.streams && event.streams[0]) {
-        console.debug("Received remote stream:", event.streams[0].id);
-        setRemoteStream(event.streams[0]);
-      }
+      setRemoteStream(event.streams[0]);
     };
 
     const getMedia = async () => {
@@ -1507,13 +1466,9 @@ const OnlineDebateRoom = (): JSX.Element => {
           audio: true,
         });
         setLocalStream(stream);
-        localStreamRef.current = stream;
-
         stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-
         flushSpectatorOfferQueue();
       } catch (err) {
-        mediaErrorRef.current = true;
         setMediaError(
           "Failed to access camera/microphone. Please check permissions."
         );
@@ -1522,6 +1477,9 @@ const OnlineDebateRoom = (): JSX.Element => {
     };
 
     return () => {
+      if (participantFetchTimeout !== undefined) {
+        window.clearTimeout(participantFetchTimeout);
+      }
       const activeLocalStream = localStreamRef.current;
       if (activeLocalStream) {
         activeLocalStream.getTracks().forEach((track) => track.stop());
@@ -1539,6 +1497,7 @@ const OnlineDebateRoom = (): JSX.Element => {
     };
   }, [
     cleanupSpectatorConnection,
+    cleanupSpectatorConnectionsByBase,
     flushSpectatorOfferQueue,
     processSpectatorOfferRequest,
     queueSpectatorOffer,
@@ -1562,7 +1521,7 @@ const OnlineDebateRoom = (): JSX.Element => {
   }, [localStream, remoteStream]);
 
   // Initialize Audio Recording
-   
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const initializeAudio = async () => {
       try {
@@ -1673,7 +1632,7 @@ const OnlineDebateRoom = (): JSX.Element => {
   }, []);
 
   // Initialize Speech Recognition
-   
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const initializeSpeechRecognition = () => {
       if (
@@ -1714,39 +1673,35 @@ const OnlineDebateRoom = (): JSX.Element => {
           }
 
           if (finalTranscript.trim()) {
-            if (debatePhase === DebatePhase.Setup) {
-              setSpeechTopicBuffer((prev) => (prev + " " + finalTranscript).trim());
-            } else {
-              // Add final transcript to current phase
-              setSpeechTranscripts((prev) => ({
-                ...prev,
-                [debatePhase]: (
-                  (prev[debatePhase] || "") +
-                  " " +
-                  finalTranscript
-                ).trim(),
-              }));
-              setCurrentTranscript("");
+            // Add final transcript to current phase
+            setSpeechTranscripts((prev) => ({
+              ...prev,
+              [debatePhase]: (
+                (prev[debatePhase] || "") +
+                " " +
+                finalTranscript
+              ).trim(),
+            }));
+            setCurrentTranscript("");
 
-              // Send transcript to backend
-              if (wsRef.current?.readyState === WebSocket.OPEN) {
-                wsRef.current.send(
-                  JSON.stringify({
-                    type: "speechText",
-                    userId: currentUser?.id,
-                    username: currentUser?.displayName,
-                    speechText: finalTranscript,
-                    phase: debatePhase,
-                  })
-                );
-              }
+            // Send transcript to backend
+            if (wsRef.current?.readyState === WebSocket.OPEN) {
+              wsRef.current.send(
+                JSON.stringify({
+                  type: "speechText",
+                  userId: currentUser?.id,
+                  username: currentUser?.displayName,
+                  speechText: finalTranscript,
+                  phase: debatePhase,
+                })
+              );
             }
           }
           if (interimTranscript) {
             setCurrentTranscript(interimTranscript);
 
-            // In setup phase, show interim transcript for topic as well
-            if (debatePhase !== DebatePhase.Setup && wsRef.current?.readyState === WebSocket.OPEN) {
+            // Send live transcript to opponent
+            if (wsRef.current?.readyState === WebSocket.OPEN) {
               wsRef.current.send(
                 JSON.stringify({
                   type: "liveTranscript",
@@ -1763,9 +1718,10 @@ const OnlineDebateRoom = (): JSX.Element => {
         recognition.onend = () => {
           setIsListening(false);
 
-          // Restart speech recognition if it's still the user's turn or in Setup
+          // Restart speech recognition if it's still the user's turn
           if (
-            (isMyTurn || debatePhase === DebatePhase.Setup) &&
+            isMyTurn &&
+            debatePhase !== DebatePhase.Setup &&
             debatePhase !== DebatePhase.Finished &&
             !isAutoMuted
           ) {
@@ -2017,18 +1973,20 @@ const OnlineDebateRoom = (): JSX.Element => {
   }, [isManualRecording, stopAudioRecording, stopSpeechRecognition]);
 
   useEffect(() => {
-    const canSpeakNow =
+    if (!manualRecordingRef.current) {
+      return;
+    }
+
+    const canStillSpeak =
       isMyTurn &&
       debatePhase !== DebatePhase.Setup &&
       debatePhase !== DebatePhase.Finished &&
       !isAutoMuted;
 
-    if (canSpeakNow && !manualRecordingRef.current) {
-      handleStartSpeaking();
-    } else if (!canSpeakNow && manualRecordingRef.current) {
+    if (!canStillSpeak) {
       handleStopSpeaking();
     }
-  }, [isMyTurn, debatePhase, isAutoMuted, handleStartSpeaking, handleStopSpeaking]);
+  }, [isMyTurn, debatePhase, isAutoMuted, handleStopSpeaking]);
 
   // Auto start/stop recording and speech recognition based on turn
   useEffect(() => {
@@ -2101,51 +2059,9 @@ const OnlineDebateRoom = (): JSX.Element => {
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
     const newTopic = e.target.value;
-    setLocalTopic(newTopic);
-    isTypingTopicRef.current = true;
-
-    // Pause speech recognition while typing to avoid interference
-    if (recognitionRef.current && isListening) {
-      try {
-        recognitionRef.current.stop();
-      } catch (err) {
-        console.warn("Could not stop recognition during typing:", err);
-      }
-    }
-
-    // Clear existing timeout
-    if (debounceTimeoutRef.current) {
-      clearTimeout(debounceTimeoutRef.current);
-    }
-
-    // Set new debounce timeout (300ms for snappier sync)
-    debounceTimeoutRef.current = setTimeout(() => {
-      isTypingTopicRef.current = false;
-      setTopic(newTopic);
-      const message = JSON.stringify({ 
-        type: "topicChange", 
-        topic: newTopic,
-        userId: currentUser?.id 
-      });
-      wsRef.current?.send(message);
-    }, 300);
-  };
-
-  const applyVoiceToTopic = () => {
-    if (!speechTopicBuffer.trim()) return;
-    
-    // Append speech to local topic
-    const updatedTopic = (localTopic + " " + speechTopicBuffer).trim();
-    setLocalTopic(updatedTopic);
-    setTopic(updatedTopic);
-    setSpeechTopicBuffer(""); // Clear buffer
-    setCurrentTranscript(""); // Clear interim
-
-    // Sync to other user
-    const message = JSON.stringify({ type: "topicChange", topic: updatedTopic });
+    setTopic(newTopic);
+    const message = JSON.stringify({ type: "topicChange", topic: newTopic });
     wsRef.current?.send(message);
-    
-    console.debug("Applied voice input to topic:", updatedTopic);
   };
 
   const handleRoleSelection = (role: DebateRole) => {
@@ -2156,40 +2072,33 @@ const OnlineDebateRoom = (): JSX.Element => {
       return;
     }
     setLocalRole(role);
-    const message = JSON.stringify({ 
-      type: "roleSelection", 
-      role, 
-      userId: currentUser?.id 
-    });
+    const message = JSON.stringify({ type: "roleSelection", role });
     wsRef.current?.send(message);
   };
 
   const toggleReady = () => {
+    const socket = wsRef.current;
+    if (!isWsConnected || !socket || socket.readyState !== WebSocket.OPEN) {
+      window.alert(
+        "The room connection is still reconnecting. Please try again."
+      );
+      return;
+    }
+
     const newReadyState = !localReady;
+    socket.send(JSON.stringify({ type: "ready", ready: newReadyState }));
     setLocalReady(newReadyState);
-    wsRef.current?.send(
-      JSON.stringify({ 
-        type: "ready", 
-        ready: newReadyState, 
-        userId: currentUser?.id 
-      })
-    );
   };
 
   // Manage setup popup visibility
   useEffect(() => {
-    // Only show popup during Setup phase or if roles aren't fully ready
-    if (debatePhase === DebatePhase.Setup && !(localReady && peerReady)) {
+    if (localReady && peerReady) {
+      setShowSetupPopup(false);
+      setCountdown(3);
+    } else {
       setShowSetupPopup(true);
-    } else if (localReady && peerReady) {
-      // Small delay to ensure users see the "Ready" status before it vanishes
-      const timer = setTimeout(() => {
-        setShowSetupPopup(false);
-        if (countdown === null) setCountdown(3);
-      }, 500);
-      return () => clearTimeout(timer);
     }
-  }, [localReady, peerReady, debatePhase, countdown]);
+  }, [localReady, peerReady]);
 
   // Countdown logic
   useEffect(() => {
@@ -2197,9 +2106,6 @@ const OnlineDebateRoom = (): JSX.Element => {
       const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
       return () => clearTimeout(timer);
     } else if (countdown === 0) {
-      if (!localRole) {
-        setLocalRole(isRoomOwner ? "for" : "against");
-      }
       setDebatePhase(DebatePhase.OpeningFor);
       wsRef.current?.send(
         JSON.stringify({ type: "phaseChange", phase: DebatePhase.OpeningFor })
@@ -2207,19 +2113,23 @@ const OnlineDebateRoom = (): JSX.Element => {
       console.debug(
         `Countdown finished. Starting debate at ${DebatePhase.OpeningFor} for ${localRole}`
       );
+      if (localRole === "for") {
+        pcRef.current
+          ?.createOffer()
+          .then((offer) =>
+            pcRef.current!.setLocalDescription(offer).then(() => offer)
+          )
+          .then((offer) =>
+            wsRef.current?.send(JSON.stringify({ type: "offer", offer }))
+          );
+      }
     }
   }, [countdown, localRole]);
 
-  // Mute microphone during Setup phase for privacy and silence
+  // Clear input fields on phase change
   useEffect(() => {
-    if (debatePhase === DebatePhase.Setup && localStream) {
-      const audioTrack = localStream.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = false;
-        console.debug("Microphone disabled for Setup phase lobby.");
-      }
-    }
-  }, [debatePhase, localStream]);
+    // Clear any audio-related state if needed
+  }, [debatePhase]);
 
   useEffect(() => {
     manualRecordingRef.current = isManualRecording;
@@ -2278,18 +2188,12 @@ const OnlineDebateRoom = (): JSX.Element => {
             Spectators: <span className="font-medium">{spectatorPresence}</span>{" "}
             | Current Turn:{" "}
             <span className="font-semibold text-orange-600">
-              {debatePhase === DebatePhase.Setup ? (
-                "Waiting for debate to start..."
-              ) : (
-                <>
-                  {isMyTurn ? "You" : "Opponent"} to{" "}
-                  {debatePhase.includes("Question")
-                    ? "ask a question"
-                    : debatePhase.includes("Answer")
-                    ? "answer"
-                    : "make a statement"}
-                </>
-              )}
+              {isMyTurn ? "You" : "Opponent"} to{" "}
+              {debatePhase.includes("Question")
+                ? "ask a question"
+                : debatePhase.includes("Answer")
+                ? "answer"
+                : "make a statement"}
             </span>
             {isAutoMuted && (
               <span className="ml-2 text-red-500 font-medium">
@@ -2300,12 +2204,10 @@ const OnlineDebateRoom = (): JSX.Element => {
           {debatePhase !== DebatePhase.Finished && debatePhase !== DebatePhase.Setup && (
             <div className="mt-2">
               <Button
-                onClick={handleEndDebate}
-                variant="destructive"
-                className="rounded-md px-4 py-1 text-sm flex items-center gap-2 mx-auto"
+                onClick={handleConcede}
+                className="bg-red-500 hover:bg-red-600 text-white rounded-md px-3 text-sm"
               >
-                <LogOut className="w-4 h-4" />
-                End Debate
+                Concede
               </Button>
             </div>
           )}
@@ -2336,65 +2238,25 @@ const OnlineDebateRoom = (): JSX.Element => {
                 {/* Debate Topic */}
                 <div className="mb-6">
                   <label className="block text-lg mb-2">Debate Topic</label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      list="topics-list"
-                      value={localTopic}
-                      onChange={handleTopicChange}
-                      onFocus={() => { isTypingTopicRef.current = true; }}
-                      onBlur={() => { 
-                        isTypingTopicRef.current = false;
-                        // Sync one last time on blur to ensure consistency
-                        setTopic(localTopic);
-                        wsRef.current?.send(JSON.stringify({ 
-                          type: "topicChange", 
-                          topic: localTopic,
-                          userId: currentUser?.id 
-                        }));
-                      }}
-                      placeholder="Select a topic or enter custom..."
-                      className="border border-border rounded-lg p-3 w-full bg-input text-foreground focus:ring-2 focus:ring-orange-400 focus:border-transparent transition-all outline-none"
-                    />
-                    <datalist id="topics-list">
-                      {predefinedTopics.map((pt, index) => (
-                        <option key={index} value={pt} />
-                      ))}
-                    </datalist>
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground italic">
-                    Both debaters can see topic changes in real-time.
-                  </p>
-
-                  {/* Voice Input Buffer Section */}
-                  <div className="mt-4 p-3 bg-muted/30 rounded-lg border border-dashed border-border">
-                    <div className="flex justify-between items-center mb-2">
-                       <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                         <div className={`w-2 h-2 rounded-full ${isListening ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}`} />
-                         {isListening ? "Mic is listening..." : "Mic is paused"}
-                       </div>
-                       {speechTopicBuffer && (
-                         <Button 
-                           size="sm" 
-                           onClick={applyVoiceToTopic}
-                           className="h-7 px-2 text-[10px] bg-primary/20 text-primary hover:bg-primary/30 border-transparent"
-                         >
-                           <Check className="w-3 h-3 mr-1" /> Apply Voice
-                         </Button>
-                       )}
-                    </div>
-                    
-                    {speechTopicBuffer ? (
-                      <p className="text-sm text-foreground/80 bg-background/50 p-2 rounded border border-border/50">
-                        <Sparkles className="w-3 h-3 inline mr-1 text-orange-400" />
-                        {speechTopicBuffer}
-                      </p>
-                    ) : (
-                      <p className="text-[11px] text-muted-foreground italic text-center py-1">
-                        Speak to buffer voice input for your topic...
-                      </p>
-                    )}
-                  </div>
+                  <select
+                    value={topic}
+                    onChange={(e) => handleTopicChange(e)}
+                    className="border border-border rounded p-2 w-full bg-input text-foreground mb-2"
+                  >
+                    <option value="">Select a topic or enter custom</option>
+                    {predefinedTopics.map((predefinedTopic, index) => (
+                      <option key={index} value={predefinedTopic}>
+                        {predefinedTopic}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    value={topic}
+                    onChange={handleTopicChange}
+                    placeholder="Or enter a custom debate topic"
+                    className="border border-border rounded p-2 w-full bg-input text-foreground"
+                  />
                 </div>
                 {/* Avatars and Role Selection */}
                 <div className="mb-6 flex justify-around">
@@ -2405,7 +2267,7 @@ const OnlineDebateRoom = (): JSX.Element => {
                         src={
                           localUser?.avatarUrl ||
                           currentUser?.avatarUrl ||
-                          "https://avatar.iran.liara.run/public/40"
+                          "https://api.dicebear.com/9.x/big-ears/svg?seed=Felix"
                         }
                         alt="You"
                         className="w-20 h-20 rounded-full object-cover"
@@ -2426,7 +2288,7 @@ const OnlineDebateRoom = (): JSX.Element => {
                           "You"}
                       </div>
                       <div className="text-xs text-gray-500">
-                        Rating: {Math.round(localUser?.elo || currentUser?.rating || 1500)}
+                        Rating: {localUser?.elo || currentUser?.rating || 1500}
                       </div>
                     </div>
                     <div className="mt-2 flex space-x-2">
@@ -2465,7 +2327,7 @@ const OnlineDebateRoom = (): JSX.Element => {
                       <img
                         src={
                           opponentUser?.avatarUrl ||
-                          "https://avatar.iran.liara.run/public/31"
+                          "https://api.dicebear.com/9.x/big-ears/svg?seed=Nolan"
                         }
                         alt="Opponent"
                         className="w-20 h-20 rounded-full object-cover"
@@ -2488,7 +2350,7 @@ const OnlineDebateRoom = (): JSX.Element => {
                             : "Waiting for opponent...")}
                       </div>
                       <div className="text-xs text-gray-500">
-                        Rating: {Math.round(opponentUser?.elo || 1500)}
+                        Rating: {opponentUser?.elo || 1500}
                       </div>
                       {!opponentUser && roomParticipants.length === 1 && (
                         <div className="text-xs text-orange-500 mt-1">
@@ -2506,24 +2368,21 @@ const OnlineDebateRoom = (): JSX.Element => {
                   </div>
                 </div>
                 {/* Ready Button */}
-                <div className="space-y-2">
-                  {!localTopic.trim() && (
-                    <p className="text-[10px] text-orange-500 text-center animate-pulse">
-                      Enter a debate topic to start.
-                    </p>
-                  )}
+                <div>
                   <Button
                     onClick={toggleReady}
-                    disabled={!localTopic.trim()}
+                    disabled={!isWsConnected}
                     className={`w-full py-2 rounded-lg transition ${
                       localReady
                         ? "bg-destructive text-destructive-foreground"
-                        : (!localTopic.trim())
-                          ? "bg-muted text-muted-foreground cursor-not-allowed"
-                          : "bg-accent text-accent-foreground"
+                        : "bg-accent text-accent-foreground"
                     }`}
                   >
-                    {localReady ? "Cancel Ready" : "I'm Ready"}
+                    {!isWsConnected
+                      ? "Connecting..."
+                      : localReady
+                      ? "Cancel Ready"
+                      : "I'm Ready"}
                   </Button>
                 </div>
               </>
@@ -2598,10 +2457,7 @@ const OnlineDebateRoom = (): JSX.Element => {
           }
           opponentAvatarUrl={opponentUser?.avatarUrl || null}
           ratingSummary={ratingSummary}
-          onClose={() => {
-            setShowJudgment(false);
-            navigate("/profile");
-          }}
+          onClose={() => setShowJudgment(false)}
         />
       )}
 
@@ -2620,7 +2476,7 @@ const OnlineDebateRoom = (): JSX.Element => {
                 src={
                   localUser?.avatarUrl ||
                   currentUser?.avatarUrl ||
-                  "https://avatar.iran.liara.run/public/40"
+                  "https://api.dicebear.com/9.x/big-ears/svg?seed=Felix"
                 }
                 alt="You"
                 className="w-full h-full rounded-full border border-orange-400 object-cover"
@@ -2632,7 +2488,7 @@ const OnlineDebateRoom = (): JSX.Element => {
               </div>
               <div className="text-xs text-gray-500">
                 Role: {localRole || "Not selected"} | Rating:{" "}
-                {Math.round(localUser?.elo || currentUser?.rating || 1500)}
+                {localUser?.elo || currentUser?.rating || 1500}
               </div>
             </div>
           </div>
@@ -2644,64 +2500,13 @@ const OnlineDebateRoom = (): JSX.Element => {
               Time:{" "}
               {formatTime(isMyTurn ? timer : phaseDurations[debatePhase] || 0)}
             </p>
-            <div className="relative group">
-              <video
-                ref={localVideoRef}
-                autoPlay
-                muted
-                playsInline
-                className={`scale-x-[-1] w-full h-80 object-cover rounded-lg ${
-                  isCameraOff || (debatePhase === DebatePhase.Setup && (!localReady || !peerReady)) ? "opacity-0" : "opacity-100"
-                } transition-opacity duration-300`}
-              />
-              {(isCameraOff || (debatePhase === DebatePhase.Setup && (!localReady || !peerReady))) && (
-                <div className="absolute inset-0 flex items-center justify-center bg-gray-900 rounded-lg overflow-hidden">
-                  <div className="relative flex flex-col items-center gap-4">
-                    <img 
-                      src={localUser?.avatarUrl || currentUser?.avatarUrl || "https://avatar.iran.liara.run/public/40"} 
-                      alt="Local Avatar"
-                      className="w-32 h-32 rounded-full border-4 border-orange-500/30 object-cover grayscale-[0.2]"
-                    />
-                    <div className="flex flex-col items-center">
-                      <span className="text-white font-medium text-lg">{localUser?.displayName || "You"}</span>
-                      <span className="text-gray-400 text-sm italic">
-                        {isCameraOff ? "Camera Off" : "Waiting in Lobby"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )}
-              {/* Media Controls Overlay */}
-              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1.5 bg-black/60 backdrop-blur-md rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                <button
-                  onClick={toggleMic}
-                  className={`p-2 rounded-full ${
-                    isMicMuted ? "bg-red-500 text-white" : "text-white hover:bg-white/20"
-                  }`}
-                  title={isMicMuted ? "Unmute" : "Mute"}
-                >
-                  {isMicMuted ? (
-                    <MicOff className="w-5 h-5" />
-                  ) : (
-                    <Mic className="w-5 h-5" />
-                  )}
-                </button>
-                <button
-                  onClick={toggleCamera}
-                  className={`p-2 rounded-full ${
-                    isCameraOff ? "bg-red-500 text-white" : "text-white hover:bg-white/20"
-                  }`}
-                  title={isCameraOff ? "Turn Camera On" : "Turn Camera Off"}
-                >
-                  {isCameraOff ? (
-                    <VideoOff className="w-5 h-5" />
-                  ) : (
-                    <Video className="w-5 h-5" />
-                  )}
-                </button>
-              </div>
-            </div>
-
+            <video
+              ref={localVideoRef}
+              autoPlay
+              muted
+              playsInline
+              className="w-full h-80 object-cover"
+            />
             {/* Speaking Controls */}
             <div className="mt-3 flex flex-col items-center gap-2">
               <Button
@@ -2735,7 +2540,7 @@ const OnlineDebateRoom = (): JSX.Element => {
               <img
                 src={
                   opponentUser?.avatarUrl ||
-                  "https://avatar.iran.liara.run/public/31"
+                  "https://api.dicebear.com/9.x/big-ears/svg?seed=Nolan"
                 }
                 alt="Opponent"
                 className="w-full h-full rounded-full border border-orange-400 object-cover"
@@ -2749,7 +2554,7 @@ const OnlineDebateRoom = (): JSX.Element => {
               </div>
               <div className="text-xs text-gray-500">
                 Role: {peerRole || "Not selected"} | Rating:{" "}
-                {Math.round(opponentUser?.elo || 1500)}
+                {opponentUser?.elo || 1500}
               </div>
             </div>
           </div>
@@ -2761,31 +2566,12 @@ const OnlineDebateRoom = (): JSX.Element => {
               Time:{" "}
               {formatTime(!isMyTurn ? timer : phaseDurations[debatePhase] || 0)}
             </p>
-            <div className="relative group">
-              <video
-                ref={remoteVideoRef}
-                autoPlay
-                playsInline
-                className={`w-full h-80 object-cover rounded-lg ${
-                   (debatePhase === DebatePhase.Setup && (!localReady || !peerReady)) ? "opacity-0" : "opacity-100"
-                } transition-opacity duration-300`}
-              />
-              {(debatePhase === DebatePhase.Setup && (!localReady || !peerReady)) && (
-                <div className="absolute inset-0 flex items-center justify-center bg-gray-900 rounded-lg overflow-hidden">
-                   <div className="relative flex flex-col items-center gap-4">
-                    <img 
-                      src={opponentUser?.avatarUrl || "https://avatar.iran.liara.run/public/31"} 
-                      alt="Peer Avatar"
-                      className="w-32 h-32 rounded-full border-4 border-orange-500/30 object-cover grayscale-[0.2]"
-                    />
-                    <div className="flex flex-col items-center">
-                      <span className="text-white font-medium text-lg">{opponentUser?.displayName || "Opponent"}</span>
-                      <span className="text-gray-400 text-sm italic">Waiting in Lobby</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
+            <video
+              ref={remoteVideoRef}
+              autoPlay
+              playsInline
+              className="w-full h-80 object-cover"
+            />
           </div>
         </div>
       </div>

@@ -1,9 +1,9 @@
 package middlewares
 
 import (
-	"clashminds/config"
-	"clashminds/db"
-	"clashminds/models"
+	"arguehub/config"
+	"arguehub/db"
+	"arguehub/models"
 	"context"
 	"fmt"
 	"log"

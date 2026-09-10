@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"clashminds/db"
-	"clashminds/models"
-	"clashminds/utils"
+	"arguehub/db"
+	"arguehub/models"
+	"arguehub/utils"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"

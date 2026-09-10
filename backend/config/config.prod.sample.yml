@@ -35,7 +35,7 @@ smtp:
   senderEmail: "<YOUR_EMAIL_ADDRESS>"
   # The 'from' email address used when sending mails
 
-  senderName: "DebateAI Team"
+  senderName: "CLASHMIND.ai Team"
 
 googleOAuth:
   clientID: "<YOUR_GOOGLE_OAUTH_CLIENT_ID>"

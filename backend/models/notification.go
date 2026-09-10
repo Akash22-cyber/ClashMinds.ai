@@ -14,7 +14,6 @@ const (
 	NotificationTypeTournament  NotificationType = "tournament"
 	NotificationTypeLeaderboard NotificationType = "leaderboard"
 	NotificationTypeSystem      NotificationType = "system"
-	NotificationTypeInvite      NotificationType = "invite"
 )
 
 type Notification struct {

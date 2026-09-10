@@ -1,8 +1,8 @@
 package routes
 
 import (
-	"clashminds/controllers"
-	"clashminds/middlewares"
+	"arguehub/controllers"
+	"arguehub/middlewares"
 
 	"github.com/gin-gonic/gin"
 )

@@ -111,9 +111,9 @@ const JudgmentPopup: React.FC<JudgmentPopupProps> = ({
   userAvatar,
   botAvatar,
   botName,
+  botDesc,
   userStance,
   botStance,
-  botDesc,
   forRole,
   againstRole,
   localRole = null,
@@ -129,10 +129,10 @@ const JudgmentPopup: React.FC<JudgmentPopupProps> = ({
 
   const localAvatar =
     localStorage.getItem('userAvatar') ||
-    'https://avatar.iran.liara.run/public/40';
+    'https://api.dicebear.com/9.x/big-ears/svg?seed=Felix';
   const opponentAvatar =
     localStorage.getItem('opponentAvatar') ||
-    'https://avatar.iran.liara.run/public/31';
+    'https://api.dicebear.com/9.x/big-ears/svg?seed=Nolan';
 
 const isUserBotFormat = 'user' in judgment.opening_statement;
 
@@ -182,7 +182,9 @@ const resolvedAgainstAvatar = isUserBotFormat
 
 const player1Avatar = resolvedForAvatar || localAvatar;
 const player2Avatar = resolvedAgainstAvatar || opponentAvatar;
-const player2Desc = isUserBotFormat ? botDesc : resolvedAgainstName || 'Debater';
+const player2Desc = isUserBotFormat 
+  ? (botDesc || 'AI Opponent') 
+  : (resolvedAgainstName || 'Debater');
 
 const formatChange = (value: number) =>
   `${value >= 0 ? '+' : ''}${value.toFixed(2)}`;
@@ -194,7 +196,7 @@ const player2RatingSummary =
   !isUserBotFormat && ratingSummary ? ratingSummary.against : null;
 
   const handleGoHome = () => {
-    navigate('/');
+    navigate('/startdebate');
   };
 
   // Helper function to safely access scores and reasons

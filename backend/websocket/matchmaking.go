@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"clashminds/db"
-	"clashminds/services"
-	"clashminds/utils"
+	"arguehub/db"
+	"arguehub/services"
+	"arguehub/utils"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"

@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"clashminds/db"
-	"clashminds/models"
+	"arguehub/db"
+	"arguehub/models"
 
 	"github.com/gorilla/websocket"
 	"go.mongodb.org/mongo-driver/bson"

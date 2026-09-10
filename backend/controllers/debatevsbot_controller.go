@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"clashminds/db"
-	"clashminds/models"
-	"clashminds/services"
-	"clashminds/utils"
-	"clashminds/websocket"
+	"arguehub/db"
+	"arguehub/models"
+	"arguehub/services"
+	"arguehub/utils"
+	"arguehub/websocket"
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"

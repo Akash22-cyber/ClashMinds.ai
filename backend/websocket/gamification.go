@@ -4,7 +4,7 @@ import (
 	"log"
 	"sync"
 
-	"clashminds/models"
+	"arguehub/models"
 
 	"github.com/gorilla/websocket"
 )

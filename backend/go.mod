@@ -1,4 +1,4 @@
-module clashminds
+module arguehub
 
 go 1.24
 

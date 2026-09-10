@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"clashminds/config"
-	"clashminds/db"
-	"clashminds/models"
+	"arguehub/config"
+	"arguehub/db"
+	"arguehub/models"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"google.golang.org/genai"
@@ -279,7 +279,7 @@ func GenerateBotResponse(botName, botLevel, topic string, history []models.Messa
 	ctx := context.Background()
 	response, err := generateDefaultModelText(ctx, prompt)
 	if err != nil {
-		log.Printf("Gemini Generation Error: %v\nPrompt: %s", err, prompt)
+		log.Printf("❌ Gemini error in GenerateBotResponse: %v", err)
 		return personalityErrorResponse(botName, "A glitch in my logic, there is.")
 	}
 	if response == "" {

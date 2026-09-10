@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"clashminds/db"
-	"clashminds/models"
+	"arguehub/db"
+	"arguehub/models"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )

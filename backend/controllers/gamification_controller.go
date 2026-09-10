@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"time"
 
-	"clashminds/db"
-	"clashminds/models"
-	"clashminds/services"
-	"clashminds/websocket"
+	"arguehub/db"
+	"arguehub/models"
+	"arguehub/services"
+	"arguehub/websocket"
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
