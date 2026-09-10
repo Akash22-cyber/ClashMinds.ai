@@ -63,7 +63,7 @@ const handleGoogleLogin = useCallback(
         theme: 'outline',
         size: 'large',
         text: 'signin_with',
-        width: '100%',
+        
       });
     }
 
@@ -175,7 +175,7 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ startOtpVerification }) 
         theme: 'outline',
         size: 'large',
         text: 'signup_with',
-        width: '100%',
+        
       });
     }
 

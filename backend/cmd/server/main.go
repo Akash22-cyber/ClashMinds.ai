@@ -79,7 +79,7 @@ func setupRouter(cfg *config.Config) *gin.Engine {
 	router.SetTrustedProxies([]string{"127.0.0.1", "localhost"})
 
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:5173"},
+		AllowOrigins:     []string{"http://localhost:5173", "https://clash-minds-ai.vercel.app"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
