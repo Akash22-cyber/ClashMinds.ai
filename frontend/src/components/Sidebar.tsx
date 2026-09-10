@@ -11,7 +11,6 @@ import {
   MessageCircle,
   Heart,
 } from 'lucide-react';
-import debateAiLogo from '@/assets/aossie.png';
 import { ThemeToggle } from './ThemeToggle';
 
 function Sidebar() {
