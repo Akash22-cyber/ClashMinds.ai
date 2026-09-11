@@ -1,6 +1,4 @@
-<p align="left">
-  <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRpPlI1P7SK3pemg67VMPbvNzxYyk0UtlmJiQ&s" alt="Aossie Logo" height="120"/>
-</p>
+
 
 <h1 align="right">
   <b>Akash22-cyber | CLASHMIND.ai</b>
